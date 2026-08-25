@@ -1,0 +1,10 @@
+User-agent: *
+Disallow: /bin/
+Disallow: /content/dam/air-india/image/company-information/*
+Disallow: /in/en/google-flight-booking.html
+Disallow: /in/en/flying-returns/loyalty-redemption.html
+
+User-agent: ClaudeBot
+Allow: *
+Disallow: /bin/
+Disallow: /in/en/google-flight-booking.html

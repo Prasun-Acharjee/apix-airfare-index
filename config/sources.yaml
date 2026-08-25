@@ -1,0 +1,134 @@
+# Source registry for the APIx collection engine.
+#
+# `compliance` is enforced at RUNTIME by apix.compliance.robots — this file is
+# documentation of an audit, not the gate itself. A source whose live robots.txt
+# disagrees with the note below is blocked by the gate regardless of `enabled`.
+#
+# Audit performed: 2026-08-25. Re-run `python -m scripts.audit_robots` to refresh.
+
+defaults:
+  user_agent: "APIx-ResearchBot/0.1 (+https://example.gov.in/apix; contact: apix-ops@example.gov.in)"
+  min_crawl_delay_s: 5.0        # floor, raised if robots.txt asks for more
+  max_requests_per_host_per_hour: 240
+  timeout_s: 45
+
+sources:
+
+  - id: air_india
+    name: Air India
+    kind: airline
+    carrier_codes: [AI]
+    base_url: https://www.airindia.com
+    search_path_template: "/in/en/book/flight-search.html"
+    enabled: true
+    compliance:
+      status: permitted
+      note: >
+        robots.txt disallows only /bin/, a company-information image path, the
+        Google flight-booking page and a loyalty-redemption page. Fare search is
+        not disallowed. The file additionally names ClaudeBot, GPTBot,
+        Google-Extended, PerplexityBot, xAI-Bot, DeepseekBot and CCBot with
+        "Allow: *". No Crawl-delay directive; we apply our own 5s floor.
+
+  - id: yatra
+    name: Yatra
+    kind: ota
+    carrier_codes: [AI, 6E, SG, QP, IX, UK]
+    base_url: https://www.yatra.com
+    search_path_template: "/flights/search"
+    enabled: true
+    compliance:
+      status: permitted_with_delay
+      crawl_delay_s: 5.0
+      note: >
+        Disallows affiliate and beta paths (/FM/, /TP/, /ads/,
+        /travel-beta/cheap-air-tickets). General flight search is not
+        disallowed. ClaudeBot / GPTBot / anthropic-ai are explicitly permitted
+        with Crawl-delay: 5. Cheap-flights sitemaps are published, which
+        signals search result pages are intended to be indexable.
+
+  - id: spicejet
+    name: SpiceJet
+    kind: airline
+    carrier_codes: [SG]
+    base_url: https://www.spicejet.com
+    search_path_template: "/"
+    enabled: false
+    compliance:
+      status: blocked_partial
+      note: >
+        The rendered booking UI is not disallowed, but robots.txt disallows
+        https://www.spicejet.com/api/v1 — which is the XHR endpoint the UI
+        calls to retrieve fares. Scraping the UI would obtain exactly the data
+        the disallowed endpoint serves, so we treat the whole fare path as
+        disallowed rather than routing around the directive. Requires a
+        commercial/partner feed.
+
+  - id: indigo
+    name: IndiGo
+    kind: airline
+    carrier_codes: [6E]
+    base_url: https://www.goindigo.in
+    search_path_template: "/booking/select-flight"
+    enabled: false
+    compliance:
+      status: blocked
+      note: >
+        robots.txt: "Disallow: /booking/*" and "Disallow: /book/*" for
+        User-agent: *. Fare search lives under /booking/. Not collectable.
+        Requires a commercial/partner feed.
+
+  - id: air_india_express
+    name: Air India Express
+    kind: airline
+    carrier_codes: [IX]
+    base_url: https://www.airindiaexpress.com
+    search_path_template: "/flight-availability"
+    enabled: false
+    compliance:
+      status: blocked
+      note: >
+        robots.txt: "Disallow: /flight-availability" — precisely the fare
+        availability path. Not collectable. Requires a commercial/partner feed.
+
+  - id: akasa
+    name: Akasa Air
+    kind: airline
+    carrier_codes: [QP]
+    base_url: https://www.akasaair.com
+    search_path_template: "/"
+    enabled: false
+    compliance:
+      status: blocked_unverifiable
+      note: >
+        https://www.akasaair.com/robots.txt returns HTTP 403 to a non-browser
+        client. We cannot read the site's crawl policy, and the 403 is itself
+        the operator refusing our request. Treated as disallowed. Requires a
+        commercial/partner feed.
+
+  - id: cleartrip
+    name: Cleartrip
+    kind: ota
+    carrier_codes: [AI, 6E, SG, QP, IX, UK]
+    base_url: https://www.cleartrip.com
+    search_path_template: "/flights/search"
+    enabled: false
+    compliance:
+      status: blocked
+      note: >
+        robots.txt: "Disallow: /flights/search*", "Disallow: /m/flights/search*",
+        "Disallow: /flights/international/search". Not collectable.
+
+  - id: makemytrip
+    name: MakeMyTrip
+    kind: ota
+    carrier_codes: [AI, 6E, SG, QP, IX, UK]
+    base_url: https://www.makemytrip.com
+    search_path_template: "/flight/search"
+    enabled: false
+    compliance:
+      status: blocked_unverifiable
+      note: >
+        robots.txt fetch timed out during the audit; crawl policy unknown.
+        Fail-closed: a source whose policy we cannot read is not collected.
+        Re-audit before enabling.

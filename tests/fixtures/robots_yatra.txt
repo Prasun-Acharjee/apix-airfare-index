@@ -1,0 +1,9 @@
+User-agent: *
+Disallow: /FM/
+Disallow: /TP/
+Disallow: /ads/
+Disallow: /travel-beta/cheap-air-tickets
+
+User-agent: ClaudeBot
+Allow: /
+Crawl-delay: 5

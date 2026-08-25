@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APIx — Real-time Airfare Price Index</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-0:#f5f5f3; --surface-1:#fcfcfb; --border:#e2e1dc;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#78776f; --grid:#e8e7e2;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b;
+    --seq-1:#cde2fb; --seq-2:#9ec5f4; --seq-3:#6da7ec; --seq-4:#2a78d6; --seq-5:#1c5cab; --seq-6:#0d366b;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --surface-0:#111110; --surface-1:#1a1a19; --border:#333330;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#94938a; --grid:#2c2c29;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+    --seq-1:#0d366b; --seq-2:#104281; --seq-3:#184f95; --seq-4:#256abf; --seq-5:#3987e5; --seq-6:#86b6ef;
+  }}
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-0:#111110; --surface-1:#1a1a19; --border:#333330;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#94938a; --grid:#2c2c29;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+    --seq-1:#0d366b; --seq-2:#104281; --seq-3:#184f95; --seq-4:#256abf; --seq-5:#3987e5; --seq-6:#86b6ef;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 64px}
+  header h1{font-size:23px;margin:0 0 4px;letter-spacing:-.01em}
+  header p{margin:0;color:var(--text-secondary);font-size:14px}
+  .banner{margin:18px 0;padding:11px 14px;border-radius:8px;font-size:13.5px;border:1px solid;
+    display:flex;gap:9px;align-items:flex-start;
+    background:color-mix(in srgb,var(--warning) 11%,var(--surface-1));
+    border-color:color-mix(in srgb,var(--warning) 45%,transparent)}
+  .banner .ico{flex:none;font-weight:700}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px;margin:18px 0}
+  .tile{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .tile .label{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+  .tile .value{font-size:27px;font-weight:600;margin-top:5px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .tile .sub{font-size:12.5px;color:var(--text-secondary);margin-top:3px}
+  .card{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:16px 18px 12px;margin:16px 0}
+  .card h2{font-size:15px;margin:0 0 2px;font-weight:600}
+  .card .note{font-size:12.5px;color:var(--text-muted);margin:0 0 12px}
+  .controls{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
+  button.seg{font:inherit;font-size:13px;padding:5px 12px;border-radius:999px;cursor:pointer;
+    border:1px solid var(--border);background:transparent;color:var(--text-secondary)}
+  button.seg[aria-pressed="true"]{background:var(--s1);border-color:var(--s1);color:#fff}
+  .chart{width:100%;overflow-x:auto}
+  svg{display:block;max-width:100%}
+  .grid line{stroke:var(--grid);stroke-width:1}
+  .axis text{fill:var(--text-muted);font-size:11px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 0;font-size:12.5px;color:var(--text-secondary)}
+  .legend .k{display:inline-flex;align-items:center;gap:6px}
+  .legend .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  .tip{position:fixed;pointer-events:none;background:var(--surface-1);border:1px solid var(--border);
+    border-radius:7px;padding:8px 10px;font-size:12.5px;box-shadow:0 6px 20px rgba(0,0,0,.16);
+    opacity:0;transition:opacity .09s;z-index:9;max-width:250px}
+  .tip .r{display:flex;justify-content:space-between;gap:14px;font-variant-numeric:tabular-nums}
+  .tip .t{font-weight:600;margin-bottom:4px}
+  table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+  th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--text-muted);font-weight:500;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+  td.num{text-align:right}
+  details summary{cursor:pointer;font-size:13px;color:var(--text-secondary);padding:6px 0}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--border)}
+  .pill.ok{color:var(--good)} .pill.warn{color:var(--warning)} .pill.fail{color:var(--critical)}
+  .srcrow{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13.5px;align-items:baseline}
+  .srcrow:last-child{border-bottom:0}
+  .srcrow .why{color:var(--text-muted);font-size:12px;max-width:62%}
+  .err{color:var(--critical);font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>APIx — Real-time Airfare Price Index</h1>
+    <p>Prototype index for the CPI Transport &amp; Communication sub-group · base <span id="base">—</span> = 100</p>
+  </header>
+  <div id="banner"></div>
+  <div class="tiles" id="tiles"></div>
+  <section class="card">
+    <h2>Index level</h2>
+    <p class="note">Chained weighted geometric index. Points where imputation exceeded the fail threshold are excluded.</p>
+    <div class="controls" id="freq">
+      <button class="seg" data-f="daily" aria-pressed="true">Daily</button>
+      <button class="seg" data-f="weekly" aria-pressed="false">Weekly</button>
+      <button class="seg" data-f="monthly" aria-pressed="false">Monthly</button>
+    </div>
+    <div class="chart" id="line"></div>
+    <details><summary>Table view</summary><div id="linetable"></div></details>
+  </section>
+  <section class="card">
+    <h2>Fare by advance-purchase window</h2>
+    <p class="note">Mean observed fare per booking window, latest collection day. One measure across an ordered dimension, so one hue; every bar is direct-labelled.</p>
+    <div class="chart" id="curve"></div>
+    <div class="legend" id="curvelegend"></div>
+  </section>
+  <section class="card">
+    <h2>Route × window fare matrix</h2>
+    <p class="note">Latest observed fare, ₹. Stronger colour = higher fare; the value is printed on every cell.</p>
+    <div class="chart" id="heat"></div>
+  </section>
+  <section class="card">
+    <h2>Source compliance</h2>
+    <p class="note">Which sources this index collects from, and why the others are excluded.</p>
+    <div id="sources"></div>
+  </section>
+</div>
+<div class="tip" id="tip"></div>
+<script>
+const API = location.origin, tip = document.getElementById('tip');
+const fmt = n => n.toLocaleString('en-IN',{maximumFractionDigits:2});
+const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function showTip(html,x,y){ tip.innerHTML=html; tip.style.opacity=1;
+  const r=tip.getBoundingClientRect();
+  tip.style.left=Math.min(x+14,innerWidth-r.width-10)+'px';
+  tip.style.top=Math.max(y-r.height-12,8)+'px'; }
+const hideTip=()=>tip.style.opacity=0;
+async function get(p){ const r=await fetch(API+p); if(!r.ok) throw new Error(p+' → '+r.status); return r.json(); }
+
+function lineChart(el,rows){
+  const W=Math.max(680,el.clientWidth||680),H=300,M={t:14,r:20,b:30,l:56};
+  const iw=W-M.l-M.r, ih=H-M.t-M.b;
+  if(!rows.length){ el.innerHTML='<p class="err">No publishable points.</p>'; return; }
+  const xs=rows.map(r=>new Date(r.on_date).getTime()), ys=rows.map(r=>r.value);
+  const x0=Math.min(...xs),x1=Math.max(...xs);
+  let y0=Math.min(...ys),y1=Math.max(...ys);
+  const pad=(y1-y0)*0.12||2; y0-=pad; y1+=pad;
+  const X=v=>M.l+(x1===x0?iw/2:(v-x0)/(x1-x0)*iw), Y=v=>M.t+ih-(v-y0)/(y1-y0)*ih;
+  const yt=Array.from({length:5},(_,i)=>y0+(y1-y0)*i/4);
+  const d=rows.map((r,i)=>(i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(ys[i]).toFixed(1)).join(' ');
+  const area=d+` L ${X(x1).toFixed(1)} ${M.t+ih} L ${X(x0).toFixed(1)} ${M.t+ih} Z`;
+  const nx=Math.min(6,rows.length);
+  const xIdx=Array.from({length:nx},(_,i)=>Math.round(i*(rows.length-1)/Math.max(nx-1,1)));
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="APIx index level over time">
+    <defs><linearGradient id="ag" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="${css('--s1')}" stop-opacity=".18"/>
+      <stop offset="100%" stop-color="${css('--s1')}" stop-opacity="0"/></linearGradient></defs>
+    <g class="grid">${yt.map(v=>`<line x1="${M.l}" x2="${M.l+iw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>`).join('')}</g>
+    <g class="axis">${yt.map(v=>`<text x="${M.l-9}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${fmt(v)}</text>`).join('')}
+      ${xIdx.map(i=>`<text x="${X(xs[i]).toFixed(1)}" y="${H-10}" text-anchor="middle">${rows[i].on_date.slice(5)}</text>`).join('')}</g>
+    <path d="${area}" fill="url(#ag)"/>
+    <path d="${d}" fill="none" stroke="${css('--s1')}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line id="cross" y1="${M.t}" y2="${M.t+ih}" stroke="${css('--border')}" stroke-width="1" opacity="0"/>
+    <circle id="cur" r="5" fill="${css('--s1')}" stroke="${css('--surface-1')}" stroke-width="2" opacity="0"/>
+    <rect x="${M.l}" y="${M.t}" width="${iw}" height="${ih}" fill="transparent" id="hit"/></svg>`;
+  const svg=el.querySelector('svg'),hit=el.querySelector('#hit'),cur=el.querySelector('#cur'),cross=el.querySelector('#cross');
+  hit.addEventListener('mousemove',e=>{
+    const b=svg.getBoundingClientRect(), sx=(e.clientX-b.left)*(W/b.width);
+    let best=0,bd=1e9;
+    rows.forEach((r,i)=>{const dd=Math.abs(X(xs[i])-sx); if(dd<bd){bd=dd;best=i;}});
+    const r=rows[best];
+    cur.setAttribute('cx',X(xs[best])); cur.setAttribute('cy',Y(ys[best])); cur.setAttribute('opacity',1);
+    cross.setAttribute('x1',X(xs[best])); cross.setAttribute('x2',X(xs[best])); cross.setAttribute('opacity',1);
+    showTip(`<div class="t">${r.on_date}</div>
+      <div class="r"><span>Index</span><b>${fmt(r.value)}</b></div>
+      <div class="r"><span>Coverage</span><span>${(r.coverage*100).toFixed(1)}%</span></div>
+      <div class="r"><span>Imputed</span><span>${(r.imputation_share*100).toFixed(1)}%</span></div>
+      <div class="r"><span>Quality</span><span>${r.quality}</span></div>`,e.clientX,e.clientY);
+  });
+  hit.addEventListener('mouseleave',()=>{hideTip();cur.setAttribute('opacity',0);cross.setAttribute('opacity',0);});
+}
+function lineTable(el,rows){
+  el.innerHTML=`<table><thead><tr><th>Date</th><th class="num">Index</th><th class="num">Coverage</th>
+    <th class="num">Imputed</th><th>Quality</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${r.on_date}</td><td class="num">${fmt(r.value)}</td>
+      <td class="num">${(r.coverage*100).toFixed(1)}%</td><td class="num">${(r.imputation_share*100).toFixed(1)}%</td>
+      <td><span class="pill ${r.quality}">${r.quality}</span></td></tr>`).join('')}</tbody></table>`;
+}
+function curveChart(el,legendEl,cells){
+  const byWin={}; cells.forEach(c=>{(byWin[c.advance_days] ||= []).push(c.p);});
+  const wins=Object.keys(byWin).map(Number).sort((a,b)=>a-b);
+  if(!wins.length){ el.innerHTML='<p class="err">No data.</p>'; return; }
+  const vals=wins.map(w=>byWin[w].reduce((a,b)=>a+b,0)/byWin[w].length);
+  const W=Math.max(560,el.clientWidth||560),H=260,M={t:26,r:16,b:38,l:64};
+  const iw=W-M.l-M.r, ih=H-M.t-M.b, ymax=Math.max(...vals)*1.16;
+  const bw=Math.min(74, iw/wins.length-14);
+  const X=i=>M.l+(i+0.5)*(iw/wins.length), Y=v=>M.t+ih-v/ymax*ih;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Average fare by advance purchase window">
+    <g class="grid">${[0,.25,.5,.75,1].map(f=>`<line x1="${M.l}" x2="${M.l+iw}" y1="${(M.t+ih-f*ih).toFixed(1)}" y2="${(M.t+ih-f*ih).toFixed(1)}"/>`).join('')}</g>
+    <g class="axis">${[0,.25,.5,.75,1].map(f=>`<text x="${M.l-9}" y="${(M.t+ih-f*ih+4).toFixed(1)}" text-anchor="end">${inr(f*ymax)}</text>`).join('')}</g>
+    ${wins.map((w,i)=>`<rect x="${(X(i)-bw/2).toFixed(1)}" y="${Y(vals[i]).toFixed(1)}" width="${bw.toFixed(1)}"
+        height="${(M.t+ih-Y(vals[i])).toFixed(1)}" rx="4" fill="${css('--s1')}" data-i="${i}" class="bar"/>
+      <text x="${X(i).toFixed(1)}" y="${(Y(vals[i])-8).toFixed(1)}" text-anchor="middle" fill="${css('--text-primary')}"
+        font-size="12" font-weight="600">${inr(vals[i])}</text>
+      <text x="${X(i).toFixed(1)}" y="${H-12}" text-anchor="middle" fill="${css('--text-muted')}" font-size="11.5">T+${w}</text>`).join('')}
+  </svg>`;
+  legendEl.innerHTML='';  // one series, one measure - the title names it; no legend box
+  el.querySelectorAll('.bar').forEach(b=>{
+    b.addEventListener('mousemove',e=>{const i=+b.dataset.i;
+      showTip(`<div class="t">T+${wins[i]} days</div>
+        <div class="r"><span>Mean fare</span><b>${inr(vals[i])}</b></div>
+        <div class="r"><span>Cells</span><span>${byWin[wins[i]].length}</span></div>`,e.clientX,e.clientY);});
+    b.addEventListener('mouseleave',hideTip);
+  });
+}
+function heatmap(el,cells){
+  if(!cells.length){ el.innerHTML='<p class="err">No data.</p>'; return; }
+  const routes=[...new Set(cells.map(c=>c.route))];
+  const wins=[...new Set(cells.map(c=>c.advance_days))].sort((a,b)=>a-b);
+  const idx={}; cells.forEach(c=>idx[c.route+'|'+c.advance_days]=c.p);
+  const vals=cells.map(c=>c.p), lo=Math.min(...vals), hi=Math.max(...vals);
+  const ramp=['--seq-1','--seq-2','--seq-3','--seq-4','--seq-5','--seq-6'].map(css);
+  const f=v=>(v-lo)/(hi-lo||1);
+  const colour=v=>ramp[Math.min(ramp.length-1,Math.floor(f(v)*ramp.length))];
+  const lum=hex=>{const c=hex.replace('#','');
+    const [r,g,b]=[0,2,4].map(i=>{const x=parseInt(c.substr(i,2),16)/255;
+      return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4);});
+    return .2126*r+.7152*g+.0722*b;};
+  const ink=v=>lum(colour(v))<0.38?'#ffffff':'#0b0b0b';
+  const cw=96,ch=34,L=112,T=26;
+  const W=L+wins.length*cw+16, H=T+routes.length*ch+10;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Fare by route and advance window">
+    ${wins.map((w,j)=>`<text x="${L+j*cw+cw/2}" y="${T-9}" text-anchor="middle" fill="${css('--text-muted')}" font-size="11.5">T+${w}</text>`).join('')}
+    ${routes.map((r,i)=>`<text x="${L-10}" y="${T+i*ch+ch/2+4}" text-anchor="end" fill="${css('--text-secondary')}" font-size="12">${r}</text>`).join('')}
+    ${routes.map((r,i)=>wins.map((w,j)=>{const v=idx[r+'|'+w]; if(v===undefined) return '';
+      return `<g class="cell" data-r="${r}" data-w="${w}" data-v="${v}">
+        <rect x="${L+j*cw+1}" y="${T+i*ch+1}" width="${cw-2}" height="${ch-2}" rx="4" fill="${colour(v)}"/>
+        <text x="${L+j*cw+cw/2}" y="${T+i*ch+ch/2+4}" text-anchor="middle" font-size="11.5"
+          fill="${ink(v)}">${inr(v)}</text></g>`;}).join('')).join('')}
+  </svg>`;
+  el.querySelectorAll('.cell').forEach(g=>{
+    g.addEventListener('mousemove',e=>showTip(`<div class="t">${g.dataset.r} · T+${g.dataset.w}</div>
+      <div class="r"><span>Mean fare</span><b>${inr(+g.dataset.v)}</b></div>`,e.clientX,e.clientY));
+    g.addEventListener('mouseleave',hideTip);
+  });
+}
+let freq='daily';
+async function boot(){
+  try{
+    const [health,comp,routes]=await Promise.all([get('/health'),get('/compliance'),get('/routes')]);
+    const d=await get('/index/'+freq);
+    document.getElementById('base').textContent=d.base_period;
+    lineChart(document.getElementById('line'),d.series);
+    lineTable(document.getElementById('linetable'),d.series);
+    document.getElementById('banner').innerHTML = health.synthetic
+      ? `<div class="banner"><span class="ico">⚠</span><span><b>Synthetic data.</b> This series is computed from
+         simulated quotes to demonstrate the pipeline. It is not a measurement of airfare inflation and must not be cited as one.</span></div>` : '';
+    const s=d.series,last=s[s.length-1],prev=s[s.length-2];
+    const mom=prev?(last.value/prev.value-1)*100:0;
+    const per=freq==='daily'?'day':freq==='weekly'?'week':'month';
+    document.getElementById('tiles').innerHTML=`
+      <div class="tile"><div class="label">Index level</div><div class="value">${fmt(last.value)}</div><div class="sub">${last.on_date}</div></div>
+      <div class="tile"><div class="label">Change (${per})</div><div class="value">${mom>=0?'+':''}${mom.toFixed(2)}%</div><div class="sub">vs previous period</div></div>
+      <div class="tile"><div class="label">Basket coverage</div><div class="value">${(last.coverage*100).toFixed(1)}%</div><div class="sub">${last.n_cells_matched} cells observed</div></div>
+      <div class="tile"><div class="label">Carried by imputation</div><div class="value">${(last.imputation_share*100).toFixed(1)}%</div><div class="sub"><span class="pill ${last.quality}">${last.quality}</span></div></div>`;
+    curveChart(document.getElementById('curve'),document.getElementById('curvelegend'),routes.cells);
+    heatmap(document.getElementById('heat'),routes.cells);
+    document.getElementById('sources').innerHTML=comp.sources.map(x=>`<div class="srcrow">
+      <span><span class="pill ${x.collected?'ok':'fail'}">${x.collected?'collected':'excluded'}</span>&nbsp;<b>${x.name}</b>
+        <span style="color:var(--text-muted)">· ${x.status}</span></span>
+      <span class="why">${x.reason}</span></div>`).join('');
+  }catch(e){
+    document.getElementById('banner').innerHTML=`<div class="banner"><span class="ico">⚠</span><span>Could not reach the API: ${e.message}.
+      Start it with <code>uvicorn apix.api.main:app --reload</code>.</span></div>`;
+  }
+}
+document.getElementById('freq').addEventListener('click',async e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  freq=b.dataset.f;
+  document.querySelectorAll('#freq .seg').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+  await boot();
+});
+addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(boot,180);});
+boot();
+</script>
+</body>
+</html>

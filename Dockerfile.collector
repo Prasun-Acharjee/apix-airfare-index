@@ -1,0 +1,18 @@
+# The Python collector and index worker. Not a web service — run on a schedule.
+FROM mcr.microsoft.com/playwright/python:v1.49.0-jammy
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY apix ./apix
+COPY config ./config
+COPY scripts ./scripts
+COPY db ./db
+COPY tests ./tests
+COPY pyproject.toml .
+
+# Fail the image build if the index engine is broken.
+RUN python -m pytest -q
+
+CMD ["python", "scripts/run_collection.py", "-v"]

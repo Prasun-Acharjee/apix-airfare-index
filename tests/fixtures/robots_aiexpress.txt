@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /rsm-dashboard
+Disallow: /retro-claim
+Disallow: /flight-availability
+Disallow: /dam
+Disallow: /content/dam

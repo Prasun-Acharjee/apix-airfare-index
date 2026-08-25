@@ -1,0 +1,53 @@
+# Self-hosting alternative to Vercel + Neon. Everything on one machine.
+#
+#   cp web/.env.example .env && docker compose up -d
+#   docker compose exec web npm run db:migrate
+#   docker compose run --rm collector python scripts/seed_postgres.py --days 120
+#
+# The collector is a one-shot container, not a service: run it from cron on the
+# host, or keep using the GitHub Actions workflow and point it at this database.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: apix
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apix}
+      POSTGRES_DB: apix
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apix -d apix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://apix:${POSTGRES_PASSWORD:-apix}@db:5432/apix
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.collector
+    environment:
+      DATABASE_URL: postgresql://apix:${POSTGRES_PASSWORD:-apix}@db:5432/apix
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+
+volumes:
+  pgdata:

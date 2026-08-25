@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Node / Next
+node_modules/
+.next/
+out/
+.vercel
+
+# Env
+.env
+.env.local
+.env*.local
+!.env.example

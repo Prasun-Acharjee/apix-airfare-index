@@ -1,0 +1,79 @@
+name: Daily collection and index rebuild
+
+# The scraper cannot live on Vercel: it needs a real browser, a long-running
+# process and a per-host crawl delay measured in seconds. It runs here instead
+# and writes to the same Postgres the website reads.
+on:
+  schedule:
+    # 02:30 UTC = 08:00 IST, after the previous day's fares have settled.
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Audit robots.txt only; do not collect"
+        type: boolean
+        default: false
+
+concurrency:
+  group: apix-collection
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Verify the index engine before trusting it with real data
+        run: python -m pytest -q
+
+      - name: Re-audit robots.txt
+        # Sites change their crawl policy without notice. If the live gate
+        # disagrees with config/sources.yaml this exits non-zero and the run
+        # stops before a single fare request is made.
+        run: python scripts/audit_robots.py
+
+      - name: Collect
+        # Raw quotes go straight to Postgres (DATABASE_URL is picked up
+        # automatically). The runner's filesystem is discarded after every run,
+        # so a local SQLite archive would lose the history the chained index
+        # needs — the series would reset to the base period daily.
+        if: ${{ !inputs.dry_run }}
+        run: python scripts/run_collection.py -v
+
+      - name: Rebuild the index from the full accumulated history
+        # Not just today's quotes: a chained index is rebuilt over everything
+        # collected so far. Exits non-zero on fewer than two collection days
+        # rather than republishing the base period over a live series.
+        if: ${{ !inputs.dry_run }}
+        run: python scripts/seed_postgres.py --from-postgres
+
+      - name: Report what was published
+        if: ${{ !inputs.dry_run }}
+        run: |
+          python - <<'EOF'
+          import os
+          from apix.store import PostgresStore
+          st = PostgresStore(os.environ["DATABASE_URL"])
+          with st.conn.cursor() as c:
+              c.execute("SELECT on_date, value, coverage, imputation_share, quality "
+                        "FROM index_point WHERE frequency='daily' "
+                        "ORDER BY on_date DESC LIMIT 5")
+              print(f"{'date':12s} {'index':>8s} {'cover':>7s} {'imput':>7s}  quality")
+              for d, v, cov, imp, q in c.fetchall():
+                  print(f"{str(d):12s} {v:8.2f} {cov:6.1%} {imp:6.1%}  {q}")
+          st.close()
+          EOF

@@ -1,0 +1,9 @@
+User-Agent: *
+Disallow: /search.html
+Disallow: /errors
+Disallow: /booking/*
+Disallow: /book/*
+Disallow: /check-in/*
+Disallow: /account/*
+Disallow: /content/dam/
+Sitemap: https://www.goindigo.in/sitemap.xml
