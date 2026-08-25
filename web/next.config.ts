@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // `standalone` emits a self-contained server bundle for the Docker image.
-  // Vercel ignores it, so it is safe to leave on for both deployment paths.
-  output: "standalone",
+  // `standalone` emits a self-contained server bundle for the Docker image,
+  // which copies `.next/standalone`. Vercel does NOT ignore it: standalone
+  // skips `.next/next-server.js.nft.json`, which Vercel's builder opens in
+  // onBuildComplete, so leaving it on there fails the build with ENOENT.
+  output: process.env.VERCEL ? undefined : "standalone",
 
   // The Dockerfile builds from the repository root so METHODOLOGY.md is in
   // scope; tell Next where its own root is so it does not warn about the

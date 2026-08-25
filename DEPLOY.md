@@ -34,12 +34,16 @@ From the repository root:
 ```bash
 export DATABASE_URL="postgresql://...your neon pooled string..."
 
-psql "$DATABASE_URL" -f db/migrations/001_init.sql   # create tables
-
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python scripts/seed_postgres.py --days 120           # synthetic demo data
+python scripts/seed_postgres.py --days 120           # applies schema, then synthetic demo data
 ```
+
+The seeder runs `db/migrations/001_init.sql` itself, so no `psql` client is
+needed. With one to hand you can apply the schema separately instead:
+`psql "$DATABASE_URL" -f db/migrations/001_init.sql`. On Windows PowerShell the
+first two lines are `$env:DATABASE_URL = "..."` and
+`py -m venv .venv; .venv\Scripts\Activate.ps1`.
 
 `seed_postgres.py` writes source ids prefixed `sim_`, and the site banners any
 series containing them. To publish real collected data instead:
@@ -132,7 +136,6 @@ or keep the GitHub Actions workflow pointed at this database.
 # Postgres (any instance will do)
 createdb apix
 export DATABASE_URL="postgresql://localhost/apix"
-psql "$DATABASE_URL" -f db/migrations/001_init.sql
 
 # Python worker
 pip install -r requirements.txt
