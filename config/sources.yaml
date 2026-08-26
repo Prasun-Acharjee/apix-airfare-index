@@ -47,6 +47,26 @@ sources:
         with Crawl-delay: 5. Cheap-flights sitemaps are published, which
         signals search result pages are intended to be indexable.
 
+  - id: easemytrip
+    name: EaseMyTrip
+    kind: ota
+    carrier_codes: [AI, 6E, SG, QP, IX, UK]
+    base_url: https://flight.easemytrip.com
+    search_path_template: "/FlightList/Index"
+    enabled: true
+    compliance:
+      status: permitted
+      note: >
+        Fare results are served from the flight. subdomain, NOT www — the two
+        hosts publish different robots.txt. flight.easemytrip.com disallows
+        only /cgi-bin/, /admin/, /test/, /cheap_flights/, /cheap-flights/,
+        /holiday_packages/, /international_airlines/, /Packages/, /static/ and
+        /holiday-query/. /FlightList/Index is not disallowed for `*` or for us.
+        No Crawl-delay directive; we apply our own 5s floor. base_url points at
+        the flight subdomain so the runtime gate reads the policy that actually
+        governs the path we fetch. Terms of Use NOT reviewed by counsel — this
+        entry records robots.txt permission only.
+
   - id: spicejet
     name: SpiceJet
     kind: airline

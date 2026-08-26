@@ -11,6 +11,7 @@ from ..compliance.robots import RobotsGate
 from ..config import Basket, SourceConfig, load_basket, load_sources
 from ..models import QuoteStatus, RawQuote
 from .adapters.air_india import AirIndiaAdapter
+from .adapters.easemytrip import EaseMyTripAdapter
 from .adapters.yatra import YatraAdapter
 from .base import BaseAdapter, SearchRequest
 
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 
 ADAPTERS: dict[str, type[BaseAdapter]] = {
     "air_india": AirIndiaAdapter,
+    "easemytrip": EaseMyTripAdapter,
     "yatra": YatraAdapter,
 }
 
