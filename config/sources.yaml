@@ -72,7 +72,7 @@ sources:
     kind: airline
     carrier_codes: [SG]
     base_url: https://www.spicejet.com
-    search_path_template: "/"
+    search_path_template: "/api/v1"
     enabled: false
     compliance:
       status: blocked_partial
@@ -83,6 +83,9 @@ sources:
         the disallowed endpoint serves, so we treat the whole fare path as
         disallowed rather than routing around the directive. Requires a
         commercial/partner feed.
+        search_path_template points at /api/v1 deliberately: the audit must
+        check the path that carries the fares, not "/", which this site (like
+        almost every site) allows and which would make the audit meaningless.
 
   - id: indigo
     name: IndiGo
@@ -119,12 +122,15 @@ sources:
     search_path_template: "/"
     enabled: false
     compliance:
-      status: blocked_unverifiable
+      status: permitted
       note: >
-        https://www.akasaair.com/robots.txt returns HTTP 403 to a non-browser
-        client. We cannot read the site's crawl policy, and the 403 is itself
-        the operator refusing our request. Treated as disallowed. Requires a
-        commercial/partner feed.
+        Re-audited 2026-08-26: the HTTP 403 recorded on 2026-08-25 is gone.
+        robots.txt now returns 200 and does not disallow "/". The old
+        blocked_unverifiable status was therefore factually stale — we CAN read
+        the policy now, and it permits what we checked.
+        Still not collected: `enabled: false`. Only the site root has been
+        audited, the fare-search path has not been identified, and no adapter
+        exists. Identify and audit the real fare path before enabling.
 
   - id: cleartrip
     name: Cleartrip

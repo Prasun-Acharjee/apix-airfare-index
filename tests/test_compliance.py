@@ -170,3 +170,59 @@ def test_codebase_contains_no_evasion_machinery():
             if banned.search(line):
                 hits.append(f"{p.relative_to(root)}:{i}: {line.strip()}")
     assert not hits, "evasion machinery found:\n" + "\n".join(hits)
+
+
+# --- audit severity: only one disagreement may stop a scheduled run --------
+
+def test_disallow_and_unreachable_are_distinguishable(monkeypatch):
+    """The gate refuses both, but an audit must treat them differently.
+
+    A disallow is the operator's policy. An unreadable robots.txt is usually
+    the network between us and the host. Failing a nightly run on the second
+    takes down collection for every other source for no compliance reason.
+    """
+    disallowed = gate_from_body(UA, "https://h", "User-agent: *\nDisallow: /fares\n")
+    d = disallowed.check("https://h/fares")
+    assert d.allowed is False and d.readable is True
+
+    import urllib.error
+    import apix.compliance.robots as mod
+    monkeypatch.setattr(mod.urllib.request, "urlopen",
+                        lambda req, timeout=0: (_ for _ in ()).throw(TimeoutError("x")))
+    u = RobotsGate(user_agent=UA).check("https://unreachable.example/fares")
+    assert u.allowed is False and u.readable is False
+
+
+def test_audit_fails_only_when_a_collectable_source_is_disallowed(monkeypatch):
+    """scripts/audit_robots.py exit code contract, exercised without the network."""
+    import apix.compliance.robots as mod
+    from apix.config import load_sources
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "audit_robots", Path(__file__).resolve().parent.parent / "scripts" / "audit_robots.py")
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+
+    collectable = next(s for s in load_sources() if s.status.collectable)
+
+    def gate_returning(decision):
+        class G:
+            def __init__(self, **kw): pass
+            def check(self, url): return decision
+        return G
+
+    # Unreachable everywhere -> warn, but the run proceeds.
+    monkeypatch.setattr(audit, "RobotsGate", gate_returning(
+        mod.RobotsDecision(False, "unreadable - failing closed", readable=False)))
+    assert audit.main() == 0, "an unreadable robots.txt must not stop collection"
+
+    # Actively disallowed while we intend to collect -> stop.
+    monkeypatch.setattr(audit, "RobotsGate", gate_returning(
+        mod.RobotsDecision(False, "robots.txt disallows it", readable=True)))
+    assert audit.main() == 1, f"{collectable.id} is collectable but disallowed; must exit 1"
+
+    # Permitted everywhere -> clean.
+    monkeypatch.setattr(audit, "RobotsGate", gate_returning(
+        mod.RobotsDecision(True, "allowed by robots.txt", crawl_delay_s=5.0)))
+    assert audit.main() == 0

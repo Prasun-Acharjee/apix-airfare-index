@@ -41,9 +41,13 @@ jobs:
         run: python -m pytest -q
 
       - name: Re-audit robots.txt
-        # Sites change their crawl policy without notice. If the live gate
-        # disagrees with config/sources.yaml this exits non-zero and the run
-        # stops before a single fare request is made.
+        # Sites change their crawl policy without notice. This stops the run
+        # ONLY when a source we intend to collect is actively disallowed —
+        # the one disagreement that would have us crawling something we may
+        # not. An unreadable robots.txt warns and continues: the runtime gate
+        # refuses those requests per-request and records them as absences, so
+        # one unreachable host must not take down collection for every other
+        # source. See the exit-code contract in scripts/audit_robots.py.
         run: python scripts/audit_robots.py
 
       - name: Collect

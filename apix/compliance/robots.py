@@ -39,6 +39,11 @@ class RobotsDecision:
     allowed: bool
     reason: str
     crawl_delay_s: Optional[float] = None
+    # False when robots.txt could not be read at all. The gate fails closed
+    # either way, but the two refusals mean different things: a disallow is the
+    # operator's policy, an unreadable file is usually the network between us
+    # and them. Only the first should ever fail an audit.
+    readable: bool = True
 
     def __bool__(self) -> bool:
         return self.allowed
@@ -94,6 +99,7 @@ class RobotsGate:
                 f"robots.txt unreadable for {origin}"
                 + (f" (HTTP {entry.http_status})" if entry.http_status else "")
                 + " - failing closed",
+                readable=False,
             )
         if not entry.parser.can_fetch(self.user_agent, url):
             return RobotsDecision(False, f"robots.txt disallows {url} for {self.user_agent}")
