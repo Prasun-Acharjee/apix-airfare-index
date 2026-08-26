@@ -7,7 +7,13 @@
 # Audit performed: 2026-08-25. Re-run `python -m scripts.audit_robots` to refresh.
 
 defaults:
-  user_agent: "APIx-ResearchBot/0.1 (+https://example.gov.in/apix; contact: apix-ops@example.gov.in)"
+  # Sent to every site we crawl, on every request. It must be TRUE: the whole
+  # compliance argument in apix/compliance/robots.py rests on identifying
+  # ourselves honestly and being reachable. Do not claim an affiliation this
+  # project does not have, and do not point at a URL or address that does not
+  # answer — an operator who wants us to stop must be able to say so.
+  # (Previously named an example.gov.in address: neither real nor ours.)
+  user_agent: "APIx-ResearchBot/0.1 (+https://github.com/Prasun-Acharjee/apix-airfare-index; contact: https://github.com/Prasun-Acharjee/apix-airfare-index/issues)"
   min_crawl_delay_s: 5.0        # floor, raised if robots.txt asks for more
   max_requests_per_host_per_hour: 240
   timeout_s: 45

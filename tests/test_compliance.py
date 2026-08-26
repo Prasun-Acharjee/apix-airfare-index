@@ -226,3 +226,20 @@ def test_audit_fails_only_when_a_collectable_source_is_disallowed(monkeypatch):
     monkeypatch.setattr(audit, "RobotsGate", gate_returning(
         mod.RobotsDecision(True, "allowed by robots.txt", crawl_delay_s=5.0)))
     assert audit.main() == 0
+
+
+def test_user_agent_makes_no_false_claim_and_is_reachable():
+    """The UA goes to every site we crawl. Honesty there is load-bearing.
+
+    apix/compliance/robots.py argues the collector is defensible because it
+    identifies itself and can be told to stop. A borrowed affiliation or a
+    contact that does not answer breaks that argument at the first request.
+    """
+    from apix.config import load_sources
+    for s in load_sources():
+        ua = s.user_agent
+        low = ua.lower()
+        assert ".gov" not in low, f"{s.id}: UA claims a government affiliation: {ua}"
+        assert "example." not in low, f"{s.id}: UA points at a placeholder domain: {ua}"
+        assert "contact:" in low, f"{s.id}: UA declares no way to reach us: {ua}"
+        assert "http" in low, f"{s.id}: UA declares no bot-information URL: {ua}"
