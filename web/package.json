@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "db:migrate": "psql \"$DATABASE_URL\" -f ../db/migrations/001_init.sql"
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs"
   },
   "dependencies": {
     "marked": "^18.0.11",
