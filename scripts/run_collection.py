@@ -22,7 +22,11 @@ from apix.config import load_basket
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--db", default="data/apix.db")
+    # Must default to None, not to the SQLite path: CollectionRun falls back to
+    # $DATABASE_URL only when this is empty. A non-empty default silently sends a
+    # scheduled run's quotes to the CI runner's disposable filesystem.
+    ap.add_argument("--db", default=None,
+                    help="DSN; defaults to $DATABASE_URL, then data/apix.db")
     ap.add_argument("--date", default=None, help="collection date (default today)")
     ap.add_argument("--headed", action="store_true")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -45,6 +49,12 @@ def main() -> int:
         for sid, why in stats["skipped"].items():
             print(f"    {sid:20s} {why[:110]}")
     print(f"\n  Total quotes: {stats['total_quotes']:,}")
+    if not stats["total_quotes"]:
+        # Fail here rather than let the caller rebuild the index over
+        # yesterday's data and report the shortfall as its own problem.
+        print("ERROR: every source returned nothing. Not a successful pass.",
+              file=sys.stderr)
+        return 1
     print("  Run scripts/compute_index.py to rebuild the index.")
     return 0
 
