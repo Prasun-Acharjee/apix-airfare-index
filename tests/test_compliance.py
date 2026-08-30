@@ -104,6 +104,7 @@ def test_network_error_fails_closed(monkeypatch):
     def boom(req, timeout=0):
         raise TimeoutError("read timeout")
     monkeypatch.setattr(mod.urllib.request, "urlopen", boom)
+    monkeypatch.setattr(mod.time, "sleep", lambda _s: None)   # retries, but not in test time
     assert RobotsGate(user_agent=UA).check("https://www.makemytrip.com/flight/search").allowed is False
 
 

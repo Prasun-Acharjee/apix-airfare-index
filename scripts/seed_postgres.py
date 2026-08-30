@@ -10,6 +10,12 @@ The index is CHAINED, so a rebuild reads the whole accumulated quote history, no
 just the latest collection. `--from-postgres` refuses to run on fewer than two
 collection days rather than republishing the base period over a real series.
 
+It also refuses when the newest daily point fails the quality thresholds in
+config/basket.yaml. The website hides `fail` points, so publishing one leaves
+the series frozen at the last good day while every job reports success - a
+stale index and no alarm. Exit codes: 2 no data, 3 too few days, 4 nothing
+publishable.
+
 Synthetic runs write source ids prefixed `sim_`, which the website detects and
 banners. There is no flag to suppress that banner.
 """
@@ -50,6 +56,60 @@ def from_sqlite(path: str) -> list[RawQuote]:
     return out
 
 
+def missing_sources(result: dict) -> list[str]:
+    """Sources that priced cells on the previous day but none on the latest one.
+
+    A source falling out is the usual reason a point becomes unpublishable, and
+    it is worth naming: the failure surfaces in the index, several steps from
+    the collector that actually stopped returning quotes.
+    """
+    by_day = result["cell_prices"]
+    if len(by_day) < 2:
+        return []
+    days = sorted(by_day)
+    before = {c.source_id for c in by_day[days[-2]]}
+    now = {c.source_id for c in by_day[days[-1]]}
+    return sorted(before - now)
+
+
+def refuse_unpublishable(result: dict, store: PostgresStore) -> int:
+    """Exit non-zero rather than publish a series whose newest point is unusable.
+
+    The website already hides `fail`-quality points, so writing them changes
+    nothing a reader can see: the published series simply stops advancing while
+    the job keeps reporting success. That is the worst of both outcomes - a
+    stale index and no signal that anything is wrong. Refuse instead, loudly,
+    and leave the last good series in place.
+    """
+    daily = result["daily"]
+    if not daily or daily[-1].quality != "fail":
+        return 0
+
+    last = daily[-1]
+    failed = [p for p in daily if p.quality == "fail"]
+    print(f"ERROR: the newest daily point ({last.on_date}) fails the published quality "
+          f"thresholds; refusing to publish.", file=sys.stderr)
+    print(f"  {last.on_date}: value {last.value:.2f}, coverage {last.coverage:.1%}, "
+          f"imputed {last.imputation_share:.1%} "
+          f"({last.n_cells_matched} cells observed, {last.n_cells_imputed} imputed)",
+          file=sys.stderr)
+    for note in last.notes:
+        print(f"  - {note}", file=sys.stderr)
+    gone = missing_sources(result)
+    if gone:
+        print(f"  Priced nothing on {last.on_date} but did the day before: "
+              f"{', '.join(gone)}.", file=sys.stderr)
+        print("  Check the collection step's per-source counts: a source that returns "
+              "no quotes has its whole basket weight imputed.", file=sys.stderr)
+    if len(failed) > 1:
+        print(f"  {len(failed)} of {len(daily)} daily points are unpublishable "
+              f"({failed[0].on_date} to {failed[-1].on_date}).", file=sys.stderr)
+    print("  The last good series stays published. Fix the collection, then re-run; "
+          "pass --allow-failed-quality to publish anyway.", file=sys.stderr)
+    store.close()
+    return 4
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -64,6 +124,9 @@ def main() -> int:
     ap.add_argument("--dsn", default=None, help="defaults to $DATABASE_URL")
     ap.add_argument("--keep-raw", action="store_true",
                     help="also write every raw quote (large; off by default)")
+    ap.add_argument("--allow-failed-quality", action="store_true",
+                    help="publish even when the newest daily point fails the quality "
+                         "thresholds (backfills and investigation only)")
     args = ap.parse_args()
 
     dsn = args.dsn or os.environ.get("DATABASE_URL")
@@ -107,6 +170,11 @@ def main() -> int:
 
     result = build_index(raws, basket)
     print(f"  QC: {result['qc']}")
+
+    if args.from_postgres and not args.allow_failed_quality:
+        rc = refuse_unpublishable(result, store)
+        if rc:
+            return rc
 
     store.sync_sources(load_sources(), datetime.now(timezone.utc))
     store.sync_basket(basket)

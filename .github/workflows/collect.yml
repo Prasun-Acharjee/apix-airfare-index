@@ -60,13 +60,23 @@ jobs:
 
       - name: Rebuild the index from the full accumulated history
         # Not just today's quotes: a chained index is rebuilt over everything
-        # collected so far. Exits non-zero on fewer than two collection days
-        # rather than republishing the base period over a live series.
+        # collected so far. Exits non-zero rather than damaging a live series:
+        # on fewer than two collection days (which would republish the base
+        # period), and on a newest point that fails the quality thresholds.
+        #
+        # The second case is what a silent outage looks like here. The website
+        # hides `fail`-quality points, so a run that publishes one leaves the
+        # site showing the last good day while this job goes green. If this
+        # step fails on quality, read the per-source counts in the Collect step
+        # above: a source returning zero quotes has its whole basket weight
+        # imputed, and enough of that makes every new point unpublishable.
         if: ${{ !inputs.dry_run }}
         run: python scripts/seed_postgres.py --from-postgres
 
       - name: Report what was published
-        if: ${{ !inputs.dry_run }}
+        # Runs even when the rebuild refused, which is exactly when you want it:
+        # it shows what the site is actually serving and how stale that is.
+        if: ${{ !cancelled() && !inputs.dry_run }}
         run: |
           python - <<'EOF'
           import os

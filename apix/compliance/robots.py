@@ -33,6 +33,21 @@ log = logging.getLogger(__name__)
 ROBOTS_TTL_S = 3600.0
 BLOCK_STATUSES = {401, 403, 429}
 
+# A transient network failure is not a policy, and must not be treated like one.
+# An HTTP status is the operator answering us, so it is cached for the full TTL
+# and never retried. A timeout or a reset is the network between us and them: it
+# gets a few patient attempts, and is then remembered only briefly so the rest of
+# the run can try again rather than losing the source for an hour.
+#
+# Retrying a timeout is not evasion. Retrying a 403, a 429 or a challenge would
+# be, and this module does not do it - see the prohibitions at the top of the
+# file. Nothing below varies the address, the identity or the headers between
+# attempts; it is the same request, asked again.
+ROBOTS_TIMEOUT_S = 20.0
+ROBOTS_TRANSIENT_TTL_S = 120.0
+ROBOTS_TRANSIENT_ATTEMPTS = 3
+ROBOTS_RETRY_BACKOFF_S = 2.0
+
 
 @dataclass
 class RobotsDecision:
@@ -55,6 +70,12 @@ class _CachedRobots:
     fetched_at: float
     readable: bool
     http_status: Optional[int] = None
+    # How long this entry may be reused. Short for a transient failure so one
+    # slow response does not refuse every later request in the same run.
+    ttl_s: float = ROBOTS_TTL_S
+
+    def fresh(self, now: float) -> bool:
+        return (now - self.fetched_at) < self.ttl_s
 
 
 @dataclass
@@ -70,23 +91,42 @@ class RobotsGate:
 
     def _fetch(self, origin: str, robots_url: str) -> _CachedRobots:
         cached = self._cache.get(origin)
-        if cached and (time.time() - cached.fetched_at) < ROBOTS_TTL_S:
+        if cached and cached.fresh(time.time()):
             return cached
         req = urllib.request.Request(robots_url, headers={"User-Agent": self.user_agent})
-        try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-            entry = _CachedRobots(RobotsTxt(body), time.time(), readable=True, http_status=200)
-        except urllib.error.HTTPError as e:
-            # RFC 9309 treats 4xx as "no restrictions". We do not. A 403 on
-            # robots.txt is an operator actively refusing an automated client,
-            # and 404 leaves us unable to demonstrate permission for an index
-            # that has to be auditable. Fail closed either way.
-            entry = _CachedRobots(None, time.time(), readable=False, http_status=e.code)
-            log.warning("robots.txt for %s returned HTTP %s - treating as disallowed", origin, e.code)
-        except Exception as e:  # network error, TLS failure, timeout
-            entry = _CachedRobots(None, time.time(), readable=False, http_status=None)
-            log.warning("robots.txt for %s unreadable (%s) - treating as disallowed", origin, e)
+
+        last_error: Optional[BaseException] = None
+        for attempt in range(1, ROBOTS_TRANSIENT_ATTEMPTS + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=ROBOTS_TIMEOUT_S) as resp:
+                    body = resp.read().decode("utf-8", errors="replace")
+                entry = _CachedRobots(RobotsTxt(body), time.time(), readable=True,
+                                      http_status=200)
+                break
+            except urllib.error.HTTPError as e:
+                # RFC 9309 treats 4xx as "no restrictions". We do not. A 403 on
+                # robots.txt is an operator actively refusing an automated client,
+                # and 404 leaves us unable to demonstrate permission for an index
+                # that has to be auditable. Fail closed either way, first time of
+                # asking - an answer we dislike is still an answer.
+                entry = _CachedRobots(None, time.time(), readable=False,
+                                      http_status=e.code)
+                log.warning("robots.txt for %s returned HTTP %s - treating as disallowed",
+                            origin, e.code)
+                break
+            except Exception as e:  # network error, TLS failure, timeout
+                last_error = e
+                if attempt < ROBOTS_TRANSIENT_ATTEMPTS:
+                    log.info("robots.txt for %s unreadable (%s) - attempt %d of %d",
+                             origin, e, attempt, ROBOTS_TRANSIENT_ATTEMPTS)
+                    time.sleep(ROBOTS_RETRY_BACKOFF_S * attempt)
+                    continue
+                entry = _CachedRobots(None, time.time(), readable=False, http_status=None,
+                                      ttl_s=ROBOTS_TRANSIENT_TTL_S)
+                log.warning("robots.txt for %s unreadable after %d attempts (%s) - "
+                            "treating as disallowed", origin,
+                            ROBOTS_TRANSIENT_ATTEMPTS, last_error)
+
         self._cache[origin] = entry
         return entry
 
