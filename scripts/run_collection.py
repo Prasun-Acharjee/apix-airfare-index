@@ -9,6 +9,7 @@ retried from a different address and no challenge is solved.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import sys
 from datetime import date
@@ -22,11 +23,25 @@ from apix.store import is_postgres_dsn
 
 
 def describe_target(dsn: str) -> str:
-    """Where the quotes went, with any Postgres credentials stripped."""
+    """Where the quotes went, in a form that is safe in a public build log.
+
+    This line exists to catch a run writing to the wrong place, so it only has
+    to answer two questions: which backend, and is it the same one as yesterday.
+    Neither needs the endpoint.
+
+    Stripping the password is not enough. A CI log on a public repository is
+    world-readable, and a hostname like `ep-<id>.<region>.aws.neon.tech/neondb`
+    identifies the database precisely enough to be worth having: it is the
+    target any leaked or guessed credential would be pointed at. So the DSN is
+    reduced to a short digest - stable across runs, reversible into nothing.
+
+    A local SQLite path is a path on the machine that printed it, and is kept
+    as-is: it carries no secret and it is the case this line was added to catch.
+    """
     if not is_postgres_dsn(dsn):
         return f"SQLite {dsn}"
-    rest = dsn.split("://", 1)[1]
-    return f"Postgres {rest.rsplit('@', 1)[-1] if '@' in rest else rest}"
+    digest = hashlib.sha256(dsn.encode()).hexdigest()[:8]
+    return f"Postgres (endpoint redacted, dsn:{digest})"
 
 
 def build_parser() -> argparse.ArgumentParser:

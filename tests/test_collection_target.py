@@ -61,15 +61,36 @@ def test_falls_back_to_sqlite_only_when_nothing_is_configured(monkeypatch):
     assert run.db_path == "data/apix.db"
 
 
-@pytest.mark.parametrize("dsn,expected", [
-    (DSN, "Postgres db.example.net:5432/apix"),
-    ("postgres://db.example.net/apix", "Postgres db.example.net/apix"),
-    ("data/apix.db", "SQLite data/apix.db"),
-])
-def test_target_is_reported_without_leaking_credentials(dsn, expected):
+REAL_SHAPED_DSN = ("postgresql://neondb_owner:npg_EXAMPLEpassword@"
+                   "ep-snowy-example-pooler.c-4.us-east-2.aws.neon.tech/neondb"
+                   "?sslmode=require&channel_binding=require")
+
+
+@pytest.mark.parametrize("dsn", [DSN, REAL_SHAPED_DSN, "postgres://db.example.net/apix"])
+def test_a_postgres_target_leaks_nothing_into_the_log(dsn):
+    """This line lands in a CI log that is world-readable on a public repo.
+
+    Stripping the password is not enough: the endpoint hostname and database
+    name identify the target precisely, which is exactly what an attacker needs
+    to point a credential at. Nothing from the DSN may survive but a digest.
+    """
     described = run_collection.describe_target(dsn)
-    assert described == expected
-    assert "secret" not in described
+    assert described.startswith("Postgres (endpoint redacted, dsn:")
+    for leaked in ("neon.tech", "ep-snowy", "neondb", "db.example.net", "apix",
+                   "npg_", "secret", "password", "sslmode", "@"):
+        assert leaked not in described, f"{leaked!r} reached the log"
+
+
+def test_the_digest_is_stable_and_distinguishes_databases():
+    # Stable across runs so "same database as yesterday" is answerable, and
+    # different per DSN so a misrouted run is still visible.
+    assert run_collection.describe_target(DSN) == run_collection.describe_target(DSN)
+    assert run_collection.describe_target(DSN) != run_collection.describe_target(REAL_SHAPED_DSN)
+
+
+def test_a_sqlite_path_is_still_shown_in_full():
+    # A local path holds no secret, and this is the case the line was added for.
+    assert run_collection.describe_target("data/apix.db") == "SQLite data/apix.db"
 
 
 def _stats(total_quotes: int) -> dict:
@@ -111,5 +132,6 @@ def test_a_pass_that_collects_nothing_is_a_failure(pass_yielding, capsys):
 def test_a_pass_that_collects_quotes_succeeds(pass_yielding, capsys):
     assert pass_yielding(8129) == 0
     out = capsys.readouterr().out
-    assert "Rows written: 8,129 -> Postgres db.example.net:5432/apix" in out
-    assert "secret" not in out
+    assert "Rows written: 8,129 -> Postgres (endpoint redacted, dsn:" in out
+    for leaked in ("secret", "db.example.net", "apix:", "@"):
+        assert leaked not in out, f"{leaked!r} reached the log"
