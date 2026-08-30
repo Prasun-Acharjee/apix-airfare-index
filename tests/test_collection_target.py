@@ -61,9 +61,12 @@ def test_falls_back_to_sqlite_only_when_nothing_is_configured(monkeypatch):
     assert run.db_path == "data/apix.db"
 
 
-REAL_SHAPED_DSN = ("postgresql://neondb_owner:npg_EXAMPLEpassword@"
-                   "ep-snowy-example-pooler.c-4.us-east-2.aws.neon.tech/neondb"
-                   "?sslmode=require&channel_binding=require")
+# Shaped like a Neon DSN so the assertions below are meaningful, built only from
+# words that appear in no real endpoint of ours. A fixture in the file that
+# argues against printing endpoints should not echo one.
+REAL_SHAPED_DSN = ("postgresql://neondb_owner:npg_NOTAREALPASSWORD@"
+                   "ep-placeholder-fixture-000000-pooler.zz-0.example-region"
+                   ".aws.neon.tech/neondb?sslmode=require&channel_binding=require")
 
 
 @pytest.mark.parametrize("dsn", [DSN, REAL_SHAPED_DSN, "postgres://db.example.net/apix"])
