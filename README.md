@@ -387,25 +387,37 @@ at the cause:
   Previously one timeout poisoned the cache for a full hour, so a single slow
   response at the top of a run cost that source all 75 of its requests.
 
-- `config/basket.yaml` now **narrows the basket to the sources that actually
-  answer**. The retry helped but did not fix it: Air India and Yatra still return
-  0 of 75 requests from GitHub's runners, and with them in the basket 9 of 14
-  daily points were unpublishable. Weighting over EaseMyTrip alone makes the
-  index publishable again at the cost of the channel dimension. This is a
-  deliberate, dated entry in the config — never something the code decides,
-  because letting non-response reshape the basket is exactly the bias imputation
-  exists to prevent. `scope_to_dataset()` in `apix/pipeline.py` holds that line,
-  and falls back to the dataset only for a replay the scope cannot match (a
-  synthetic run, whose ids are `sim_*`).
+- `config/basket.yaml` now **records the source scope explicitly** —
+  `sources.active: [easemytrip]`, 975 cells down to 450. Be clear about what
+  this did and did not do. Air India and Yatra have never landed a usable quote
+  in this database, so `build_index` was *already* deriving that same scope from
+  the data; writing it down changed no published number. What it changes is
+  durability: a derived scope re-widens the instant one of them lands a single
+  quote, re-admitting ~85% of the weight as imputation mid-outage, and a scope
+  inferred from whatever happened to respond is not a decision anyone made or
+  can audit. `scope_to_dataset()` in `apix/pipeline.py` holds that line, falling
+  back to the dataset only for a replay the scope cannot match (a synthetic run,
+  whose ids are `sim_*`).
 
-**This is a reduction in what the index claims, not a fix.** The real fix is a
-collector on a network those two hosts answer, which restores 975 cells and the
-direct-vs-OTA split. `scripts/check_reachability.py` qualifies a candidate host —
-it fetches robots.txt and nothing else — and setting the repository variable
-`COLLECTOR_RUNNER` points the workflow at a self-hosted runner. DEPLOY.md §5
-walks through it. **When those sources come back, delete the `active` key under
-`sources:` in `basket.yaml`**; until then their quotes are still collected and
-archived, they just carry no weight.
+  The narrowing costs the direct-vs-OTA channel dimension and nothing else — all
+  six carriers survive, since EaseMyTrip quotes all six.
+
+**What is actually limiting publication is EaseMyTrip's own success rate**, and
+no basket width fixes it. The site serves a handful of requests and then returns
+403/429; after three consecutive blocks `runner.py` stops that source for the
+day. On 2026-09-08 that was `ok=3` of 75 requests, so 15 of its ~324 cells were
+observed and the rest imputed — 91%, withheld. On 2026-09-05 the same source ran
+eight minutes before blocking and the day published at 45% imputation. That is
+the whole difference between a good day and a bad one.
+
+So the real fix remains a collector on a network these hosts answer — which may
+also change how quickly EaseMyTrip starts refusing, since a 403 to a datacenter
+IP is a plausible part of this. `scripts/check_reachability.py` qualifies a
+candidate host (it fetches robots.txt and nothing else) and the repository
+variable `COLLECTOR_RUNNER` points the workflow at a self-hosted runner;
+DEPLOY.md §5 walks through it. **When Air India and Yatra land quotes again,
+delete the `active` key under `sources:`** — until then their quotes are still
+collected and archived, they just carry no weight.
 
 Read the verdicts from that script carefully. `unreachable` is the network and is
 worth moving hosts for. `refused` is an HTTP 403 or 429 — the operator declining

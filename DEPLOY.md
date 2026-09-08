@@ -124,11 +124,17 @@ closed, so both sources return zero quotes on every run — not because those si
 disallow us (their policies permit the fare paths) but because the network
 between GitHub and them does not carry the request.
 
-That is not a small operational annoyance. Those two sources carry roughly 85% of
-the basket weight, so with them silent the index runs at 85–95% imputation, fails
-its own quality thresholds, and the rebuild withholds the point. The basket is
-currently narrowed to EaseMyTrip alone to keep publishing (see
-`config/basket.yaml`, *Source scope*) — a real but reduced index.
+The basket is narrowed to EaseMyTrip alone as a result (`config/basket.yaml`,
+*Source scope*) — a real but reduced, single-channel index.
+
+Narrowing the basket did not, on its own, make the index publish again. The
+binding constraint is EaseMyTrip's own success rate: it serves a handful of
+requests and then returns 403/429, and after three consecutive blocks the runner
+stops that source for the day. A day where it answers three requests observes
+about 15 of its ~324 cells and imputes the rest — 91%, withheld. A day where it
+runs for eight minutes before blocking publishes at 45%. Moving to a network the
+sites answer is worth trying for this too, not only for the two timed-out hosts:
+a 403 served to a datacenter IP is a plausible part of the same picture.
 
 **Getting them back.** Run the collector from a network those hosts answer.
 Qualify a candidate machine before you commit to it:
