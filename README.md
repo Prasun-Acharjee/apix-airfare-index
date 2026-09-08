@@ -528,7 +528,7 @@ not have. `apix/compliance/rfc9309.py` implements RFC 9309 properly, and
 | `/` | index chart, stat tiles, advance-purchase curve, route × window fare matrix |
 | `/compliance` | the robots.txt audit from the database, the stdlib bug, the collection log |
 | `/methodology` | `METHODOLOGY.md`, rendered |
-| `/api/index/{daily\|weekly\|monthly}` | index series + provenance. `?start=&end=&includeFailed=` |
+| `/api/index/{daily\|weekly\|monthly}` | index series + provenance. `?start=&end=&route=&includeFailed=` |
 | `/api/inflation/{frequency}?periods=` | period-over-period percent change |
 | `/api/routes?on=` | observed fare matrix for one collection day |
 | `/api/compliance` | source registry with verdicts and reasons |
@@ -537,6 +537,15 @@ not have. `apix/compliance/rfc9309.py` implements RFC 9309 properly, and
 
 Two things to know:
 
+- **The headline index is not one route.** It is every city pair in the basket,
+  weighted by passenger share. The chart says so in its title, and the route
+  picker above it swaps in a single pair's index — the same chained calculation
+  over a one-route basket, anchored at the same base value. The headline is *not*
+  the average of the route series: each route renormalises within itself, while
+  the headline weights routes by traffic. `?route=DEL-BOM` on the API does the
+  same thing. Coverage on a route series is measured against that route's own
+  cells, so DEL-SXR reads 100% when all its cells were observed rather than the
+  2.6% of national traffic it carries.
 - **`fail` points are shown, badged `provisional`.** `includeFailed=false` gives
   the clean series instead — use it for any analysis where a point resting on 90%
   imputation would mislead. This filter used to default the other way, which is

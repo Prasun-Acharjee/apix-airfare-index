@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "@/lib/db";
+import { ALL_ROUTES } from "@/lib/types";
 import type {
   BasketWeight,
   CollectionLogEntry,
@@ -67,6 +68,13 @@ export interface SeriesOptions {
    * point resting on 90% imputation would be misleading.
    */
   readonly includeFailed?: boolean | undefined;
+  /**
+   * Which city pair's index to return. Defaults to ALL_ROUTES — the headline
+   * series weighted across every pair, which is NOT the average of the route
+   * series: each route is renormalised within itself, while the headline
+   * weights routes by passenger share.
+   */
+  readonly route?: string | undefined;
 }
 
 export async function getSeries(
@@ -78,6 +86,7 @@ export async function getSeries(
            coverage, imputation_share, quality, notes
     FROM index_point
     WHERE frequency = ${frequency}
+      AND route = ${opts.route ?? ALL_ROUTES}
       ${opts.start ? sql`AND on_date >= ${opts.start}` : sql``}
       ${opts.end ? sql`AND on_date <= ${opts.end}` : sql``}
       ${opts.includeFailed === false ? sql`AND quality <> 'fail'` : sql``}
@@ -239,6 +248,21 @@ export async function getIndexMeta(): Promise<IndexMeta> {
     weightSource: r.weight_source,
     updatedAt: r.updated_at.toISOString(),
   };
+}
+
+/**
+ * City pairs that actually have an index series, newest-collection-day first by
+ * name. A route only appears once it has been observed on two days — one day
+ * gives no link to chain — so this is shorter than the configured basket
+ * whenever a pair is new or has gone quiet.
+ */
+export async function getIndexedRoutes(frequency: Frequency): Promise<readonly string[]> {
+  const rows = await sql<{ route: string }[]>`
+    SELECT DISTINCT route FROM index_point
+    WHERE frequency = ${frequency} AND route <> ${ALL_ROUTES}
+    ORDER BY route
+  `;
+  return rows.map((r) => r.route);
 }
 
 export async function getBasketWeights(): Promise<readonly BasketWeight[]> {

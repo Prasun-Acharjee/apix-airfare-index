@@ -63,8 +63,29 @@ CREATE TABLE IF NOT EXISTS index_point (
     imputation_share DOUBLE PRECISION NOT NULL,
     quality          TEXT    NOT NULL,
     notes            JSONB,
-    PRIMARY KEY (frequency, on_date)
+    -- 'ALL' is the headline index over every city pair; any other value is a
+    -- single pair's own index. No real pair collides: pairs are 'AAA-BBB'.
+    route            TEXT    NOT NULL DEFAULT 'ALL',
+    PRIMARY KEY (frequency, route, on_date)
 );
+
+-- Widen an index_point created before the route dimension existed. Both
+-- statements are no-ops once applied, so migrate() stays idempotent.
+ALTER TABLE index_point ADD COLUMN IF NOT EXISTS route TEXT NOT NULL DEFAULT 'ALL';
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.key_column_usage
+        WHERE table_name = 'index_point'
+          AND constraint_name = 'index_point_pkey'
+          AND column_name = 'route'
+    ) THEN
+        ALTER TABLE index_point DROP CONSTRAINT IF EXISTS index_point_pkey;
+        ALTER TABLE index_point ADD PRIMARY KEY (frequency, route, on_date);
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS ix_point_route ON index_point (route, frequency, on_date);
 
 CREATE TABLE IF NOT EXISTS collection_log (
     id        BIGSERIAL PRIMARY KEY,

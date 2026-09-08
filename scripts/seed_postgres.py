@@ -180,12 +180,20 @@ def main() -> int:
     store.sync_basket(basket)
     n_cells = store.upsert_cell_prices(result["cell_prices"])
     n_pts = sum(store.upsert_index(result[f]) for f in ("daily", "weekly", "monthly"))
+    # Per-route series, so the site can answer "which route is this?" with a
+    # route rather than a footnote. Each is the same chained index over a
+    # one-route basket; see pipeline.route_series.
+    n_routes = 0
+    for route, freqs in result.get("by_route", {}).items():
+        n_pts += sum(store.upsert_index(pts) for pts in freqs.values())
+        n_routes += 1
     if args.keep_raw and not args.from_postgres:
         n_raw = store.insert_raw(r for r in raws if r.status == QuoteStatus.OK)
         print(f"  raw quotes written: {n_raw:,}")
     store.close()
 
-    print(f"  cell prices: {n_cells:,}   index points: {n_pts}")
+    print(f"  cell prices: {n_cells:,}   index points: {n_pts} "
+          f"(headline + {n_routes} route series)")
     last = result["daily"][-1] if result["daily"] else None
     if last:
         print(f"  latest daily: {last.on_date} = {last.value:.2f} "

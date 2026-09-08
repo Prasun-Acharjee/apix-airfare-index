@@ -116,6 +116,11 @@ class CellPrice:
     imputation_source: Optional[str] = None
 
 
+# Sentinel for "every city pair", stored in index_point.route for the headline
+# series. No real pair can collide with it: pairs are always "AAA-BBB".
+ALL_ROUTES = "ALL"
+
+
 @dataclass
 class IndexPoint:
     on_date: date
@@ -127,3 +132,9 @@ class IndexPoint:
     imputation_share: float       # weight-share carried by imputation
     quality: str                  # ok | warn | fail
     notes: list[str] = field(default_factory=list)
+    # Which slice of the basket this point measures. ALL_ROUTES is the headline
+    # index across every city pair; a route pair ("DEL-BOM") is that route on its
+    # own, re-anchored to the same base value so both are read the same way.
+    # A route series is NOT a component of the headline number - it is the same
+    # chained index computed over a one-route basket.
+    route: str = ALL_ROUTES

@@ -52,6 +52,23 @@ class Basket:
     # rather than today's compliance posture.
     active_sources: tuple[str, ...] | None = None
 
+    def for_route(self, route: str) -> "Basket":
+        """This basket restricted to one city pair, re-weighted over that pair.
+
+        Route weight becomes 1.0, so carrier x window x source weights renormalise
+        within the route and coverage is measured against the route's own cells
+        rather than the whole basket. Without that, a single-route index would
+        report the route's share of national traffic as its coverage - DEL-SXR
+        would look 2.6% covered on a day every one of its cells was observed.
+
+        The resulting series is the same chained index over a smaller basket, so
+        it is computed by the same tested code path, not a parallel one.
+        """
+        import dataclasses
+        if route not in self.route_weights:
+            raise KeyError(f"{route!r} is not in the basket")
+        return dataclasses.replace(self, route_weights={route: 1.0})
+
     def with_sources(self, source_ids: tuple[str, ...]) -> "Basket":
         import dataclasses
         return dataclasses.replace(self, active_sources=tuple(sorted(set(source_ids))))

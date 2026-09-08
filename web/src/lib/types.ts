@@ -79,6 +79,9 @@ export interface CollectionLogEntry {
   readonly nQuotes: number;
 }
 
+/** index_point.route for the headline series across every city pair. */
+export const ALL_ROUTES = "ALL";
+
 export interface BasketWeight {
   /**
    * "source" rows record which quoting sources the index is weighted over.

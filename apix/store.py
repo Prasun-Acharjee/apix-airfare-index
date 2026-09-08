@@ -110,17 +110,18 @@ class PostgresStore(Store):
         return len(rows)
 
     def upsert_index(self, points: Iterable[IndexPoint]) -> int:
-        rows = [(p.frequency, p.on_date, p.value, p.n_cells_matched, p.n_cells_imputed,
-                 p.coverage, p.imputation_share, p.quality, json.dumps(p.notes))
+        rows = [(p.frequency, p.route, p.on_date, p.value, p.n_cells_matched,
+                 p.n_cells_imputed, p.coverage, p.imputation_share, p.quality,
+                 json.dumps(p.notes))
                 for p in points]
         if not rows:
             return 0
         with self.conn.cursor() as cur:
             cur.executemany(
-                "INSERT INTO index_point (frequency,on_date,value,n_cells_matched,"
+                "INSERT INTO index_point (frequency,route,on_date,value,n_cells_matched,"
                 "n_cells_imputed,coverage,imputation_share,quality,notes) "
-                "VALUES (" + ",".join(["%s"] * 8) + ",%s::jsonb) "
-                "ON CONFLICT (frequency,on_date) DO UPDATE SET "
+                "VALUES (" + ",".join(["%s"] * 9) + ",%s::jsonb) "
+                "ON CONFLICT (frequency,route,on_date) DO UPDATE SET "
                 "value=EXCLUDED.value, n_cells_matched=EXCLUDED.n_cells_matched, "
                 "n_cells_imputed=EXCLUDED.n_cells_imputed, coverage=EXCLUDED.coverage, "
                 "imputation_share=EXCLUDED.imputation_share, quality=EXCLUDED.quality, "

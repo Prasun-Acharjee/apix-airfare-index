@@ -7,7 +7,13 @@ import { cacheHeaders } from "@/lib/cache";
 // Freshness is handled by CDN caching (see cacheHeaders / Cache-Control).
 export const dynamic = "force-dynamic";
 
-/** GET /api/index/{daily|weekly|monthly}?start=&end=&includeFailed= */
+/**
+ * GET /api/index/{daily|weekly|monthly}?start=&end=&route=&includeFailed=
+ *
+ * `route` defaults to ALL — the headline series across every city pair. Pass a
+ * pair (DEL-BOM) for that route's own index. `includeFailed=false` drops
+ * provisional points; omitted, they are returned with their quality flag.
+ */
 export async function GET(
   request: Request,
   context: { params: Promise<{ frequency: string }> },

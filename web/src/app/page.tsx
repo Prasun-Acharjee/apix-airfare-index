@@ -3,16 +3,18 @@ import { AdvanceWindowChart } from "@/components/AdvanceWindowChart";
 import { FrequencyTabs } from "@/components/FrequencyTabs";
 import { IndexChart } from "@/components/IndexChart";
 import { RouteHeatmap } from "@/components/RouteHeatmap";
+import { RoutePicker } from "@/components/RoutePicker";
 import { SeriesTable } from "@/components/SeriesTable";
 import { Banner, Card, QualityPill, Tile } from "@/components/Ui";
 import { formatDay, num, pct, qualityLabel, signedPct } from "@/lib/format";
 import {
+  getIndexedRoutes,
   getIndexMeta,
   getProvenance,
   getRouteMatrix,
   getSeries,
 } from "@/lib/queries";
-import { isFrequency, type Frequency } from "@/lib/types";
+import { ALL_ROUTES, isFrequency, type Frequency } from "@/lib/types";
 
 // Rendered per request: a build must never require database access.
 // Freshness is handled by CDN caching (see cacheHeaders / Cache-Control).
@@ -32,13 +34,22 @@ export default async function DashboardPage({
   const params = await searchParams;
   const raw = typeof params.frequency === "string" ? params.frequency : "daily";
   const frequency: Frequency = isFrequency(raw) ? raw : "daily";
+  const wanted = typeof params.route === "string" ? params.route : ALL_ROUTES;
 
-  const [series, meta, provenance, matrix] = await Promise.all([
-    getSeries(frequency),
+  const [routes, meta, provenance, matrix] = await Promise.all([
+    getIndexedRoutes(frequency),
     getIndexMeta(),
     getProvenance(),
     getRouteMatrix(),
   ]);
+  // An unknown or no-longer-published pair falls back to the headline series
+  // rather than rendering an empty chart for a route that has no index.
+  const route = wanted !== ALL_ROUTES && routes.includes(wanted) ? wanted : ALL_ROUTES;
+  const series = await getSeries(frequency, { route });
+  const showing =
+    route === ALL_ROUTES
+      ? `all ${routes.length} city pairs, weighted by passenger share`
+      : `${route} only`;
 
   if (series.length === 0) {
     return (
@@ -63,7 +74,7 @@ export default async function DashboardPage({
     <main>
       <p className="text-[14px] text-[var(--text-secondary)]">
         Prototype index for the CPI Transport &amp; Communication sub-group · base{" "}
-        {formatDay(meta.basePeriod)} = {meta.baseValue}
+        {formatDay(meta.basePeriod)} = {meta.baseValue} · showing <b>{showing}</b>
       </p>
 
       {last.quality === "fail" ? (
@@ -109,11 +120,18 @@ export default async function DashboardPage({
       </div>
 
       <Card
-        title="Index level"
-        note="Chained weighted geometric index. Provisional points are shown and badged, not hidden."
+        title={`Index level — ${showing}`}
+        note={
+          route === ALL_ROUTES
+            ? "Chained weighted geometric index over the whole basket. Provisional points are shown and badged, not hidden."
+            : `Chained weighted geometric index for ${route} alone, anchored at the same base value as the headline series. The headline is not the average of the route series: each route is renormalised within itself, while the headline weights routes by passenger share.`
+        }
         actions={
           <Suspense fallback={null}>
-            <FrequencyTabs active={frequency} />
+            <div className="flex flex-wrap items-center gap-3">
+              <RoutePicker active={route} routes={routes} />
+              <FrequencyTabs active={frequency} />
+            </div>
           </Suspense>
         }
       >

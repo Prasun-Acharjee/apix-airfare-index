@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS index_point (
     imputation_share REAL NOT NULL,
     quality         TEXT NOT NULL,
     notes           TEXT,
-    PRIMARY KEY (frequency, on_date)
+    route           TEXT NOT NULL DEFAULT 'ALL',
+    PRIMARY KEY (frequency, route, on_date)
 );
 
 CREATE TABLE IF NOT EXISTS collection_log (
@@ -136,12 +137,13 @@ def upsert_cell_prices(conn: sqlite3.Connection, by_day: dict[date, dict[Cell, C
 
 
 def upsert_index(conn: sqlite3.Connection, points: Iterable[IndexPoint]) -> int:
-    rows = [(p.frequency, p.on_date.isoformat(), p.value, p.n_cells_matched, p.n_cells_imputed,
-             p.coverage, p.imputation_share, p.quality, json.dumps(p.notes)) for p in points]
+    rows = [(p.frequency, p.route, p.on_date.isoformat(), p.value, p.n_cells_matched,
+             p.n_cells_imputed, p.coverage, p.imputation_share, p.quality,
+             json.dumps(p.notes)) for p in points]
     conn.executemany(
-        "INSERT OR REPLACE INTO index_point (frequency,on_date,value,n_cells_matched,"
-        "n_cells_imputed,coverage,imputation_share,quality,notes) VALUES ("
-        + ",".join("?" * 9) + ")", rows)
+        "INSERT OR REPLACE INTO index_point (frequency,route,on_date,value,"
+        "n_cells_matched,n_cells_imputed,coverage,imputation_share,quality,notes) "
+        "VALUES (" + ",".join("?" * 10) + ")", rows)
     return len(rows)
 
 
