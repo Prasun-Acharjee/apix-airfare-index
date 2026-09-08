@@ -16,6 +16,42 @@ meta:
   review_frequency: annual        # basket + weight revision cadence
 
 # ---------------------------------------------------------------------------
+# Source scope: which quoting sources the basket is weighted over.
+#
+# Leave `active` absent and the basket spans every source marked collectable in
+# sources.yaml. Name sources here to weight over those only.
+#
+# This is a DELIBERATE, RECORDED decision, never an automatic one. A source that
+# goes quiet for a day must be imputed — that is what imputation is for, and
+# letting non-response quietly reshape the basket is precisely the bias the
+# imputation scheme exists to prevent. Narrowing the basket is a different act:
+# it says a source is not expected back, and it changes what the published index
+# MEANS. So it belongs in version control, with a date and a reason.
+#
+# 2026-09-08 — narrowed to easemytrip.
+#   air_india and yatra return zero quotes from the GitHub-hosted runners: their
+#   robots.txt reads time out on every attempt, so the gate fails closed and all
+#   75 requests per source are recorded as non-responses. With both still in the
+#   basket their cells — roughly 85% of the weight — were imputed daily, pushing
+#   imputation share past the 60% fail threshold and making 9 of 14 daily points
+#   unpublishable. An index that cannot publish is worth less than a narrower
+#   index that can.
+#
+#   What this costs: the direct-vs-OTA channel dimension. Nothing else. All six
+#   carriers survive, because EaseMyTrip quotes all six — the basket goes from
+#   975 cells to 450, and the published series becomes a single-channel index:
+#   fares as quoted by one OTA. It is no longer evidence about what airlines
+#   charge on their own sites, and any commentary must say so.
+#
+#   REVERT THIS the moment air_india and yatra are reachable again — a collector
+#   on a network those hosts answer restores them (see DEPLOY.md, "Runner
+#   network"). Confirm with `python scripts/check_reachability.py` from the
+#   candidate host, then delete the `active` key below.
+# ---------------------------------------------------------------------------
+sources:
+  active: [easemytrip]
+
+# ---------------------------------------------------------------------------
 # Route stratum: weighted by share of domestic O-D passengers.
 # ---------------------------------------------------------------------------
 routes:

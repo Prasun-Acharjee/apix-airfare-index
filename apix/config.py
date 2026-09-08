@@ -140,7 +140,33 @@ def load_basket(path: Path | None = None) -> Basket:
         cabins=tuple(c["code"] for c in raw["cabins"] if c.get("include")),
         qc=raw["qc"],
         meta=meta,
+        # An explicit scope in the config is a recorded decision about what the
+        # index measures, so it wins over anything inferred from the data at
+        # hand. Absent, the basket spans whatever sources.yaml says we may
+        # collect, and pipeline.build_index narrows it to the sources actually
+        # present in the dataset being replayed.
+        active_sources=_active_sources(raw),
     )
+
+
+def _active_sources(raw: dict) -> tuple[str, ...] | None:
+    declared = (raw.get("sources") or {}).get("active")
+    if declared is None:
+        return None
+    ids = tuple(sorted({str(s) for s in declared}))
+    if not ids:
+        raise ValueError(
+            "config/basket.yaml: sources.active is empty. Weighting over no "
+            "source at all is not a narrower index, it is no index. Remove the "
+            "key to span every collectable source.")
+    known = {s.id for s in load_sources()}
+    unknown = sorted(set(ids) - known)
+    if unknown:
+        raise ValueError(
+            f"config/basket.yaml: sources.active names {unknown}, which are not "
+            f"in sources.yaml. A basket weighted over a source that does not "
+            f"exist would silently drop that weight.")
+    return ids
 
 
 @functools.lru_cache(maxsize=None)

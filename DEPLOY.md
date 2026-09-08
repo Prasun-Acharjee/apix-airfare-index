@@ -90,11 +90,14 @@ Add `DATABASE_URL` as a repository secret
 (*Settings → Secrets and variables → Actions → New repository secret*).
 `.github/workflows/collect.yml` then runs daily at 02:30 UTC (08:00 IST). It:
 
-1. runs the 45-test suite, and stops if the index engine is broken;
-2. re-audits robots.txt, and stops if any site's crawl policy has changed;
-3. collects — writing raw quotes **directly to Postgres**;
-4. rebuilds the index over the **entire accumulated history** and publishes it;
-5. prints the last five index points so the run log shows what was published.
+1. runs the test suite, and stops if the index engine is broken;
+2. reports which sources this runner can reach (never fails the run — see
+   *Runner network* below);
+3. re-audits robots.txt, and stops if any site's crawl policy has changed;
+4. collects — writing raw quotes **directly to Postgres**;
+5. rebuilds the index over the **entire accumulated history**, and publishes it
+   only if the newest point clears the quality thresholds;
+6. prints the last five index points so the run log shows what is actually live.
 
 Trigger it by hand from the Actions tab; use the `dry_run` input to audit only.
 
@@ -112,6 +115,63 @@ than overwriting the series. The second day's run succeeds and every run after i
 extends the series. If you want the site populated immediately, seed the
 synthetic history first (step 2) and let real collection accumulate alongside it —
 or wait two days.
+
+### 5. Runner network
+
+**GitHub-hosted runners cannot reach every source.** From `ubuntu-latest`,
+`airindia.com` and `yatra.com` time out on every robots.txt read. The gate fails
+closed, so both sources return zero quotes on every run — not because those sites
+disallow us (their policies permit the fare paths) but because the network
+between GitHub and them does not carry the request.
+
+That is not a small operational annoyance. Those two sources carry roughly 85% of
+the basket weight, so with them silent the index runs at 85–95% imputation, fails
+its own quality thresholds, and the rebuild withholds the point. The basket is
+currently narrowed to EaseMyTrip alone to keep publishing (see
+`config/basket.yaml`, *Source scope*) — a real but reduced index.
+
+**Getting them back.** Run the collector from a network those hosts answer.
+Qualify a candidate machine before you commit to it:
+
+```bash
+python scripts/check_reachability.py
+python scripts/check_reachability.py --only air_india,yatra --attempts 5
+```
+
+It fetches robots.txt and nothing else — no fare pages — so it is safe to run
+repeatedly from anywhere. Read the verdicts as:
+
+| verdict | meaning | worth moving hosts? |
+|---|---|---|
+| `readable` | policy read successfully | already fine here |
+| `unreachable` | the network between you and them | **yes** — this is the fixable case |
+| `refused` | HTTP 403/429: the operator declining automated clients | no. Same answer anywhere |
+
+Once a host reports `readable` for the sources you need:
+
+1. Register it as a self-hosted runner
+   (*Settings → Actions → Runners → New self-hosted runner*), giving it a label
+   such as `apix-collector`. It needs Python 3.11 and Chromium via
+   `playwright install --with-deps chromium`.
+2. Set the repository **variable** `COLLECTOR_RUNNER` to that label
+   (*Settings → Secrets and variables → Actions → Variables*). The workflow reads
+   `runs-on: ${{ vars.COLLECTOR_RUNNER || 'ubuntu-latest' }}`, so leaving it unset
+   keeps the GitHub-hosted default and nothing else changes.
+3. Watch the *Report which sources this runner can reach* step on the next run.
+4. When `air_india` and `yatra` come back `readable` **and** the collection step
+   shows non-zero quotes for them, widen the basket again: delete the `active`
+   key under `sources:` in `config/basket.yaml`. Until you do, their quotes are
+   collected and archived but carry no weight.
+
+A self-hosted runner executes repository code on your machine. This repository is
+public, so anyone opening a pull request could propose a workflow change — use
+the runner only on a machine you are willing to expose, and keep
+*Settings → Actions → Fork pull request workflows* set to require approval.
+
+The same reasoning applies to any other host you run the collector from: a small
+VPS on a cron schedule, or your own laptop running `scripts/run_collection.py`
+with `DATABASE_URL` set, works identically. The collector only ever writes to
+Postgres, so where it runs is free.
 
 ---
 

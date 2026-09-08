@@ -68,11 +68,20 @@ coverage drops but no fake price movement is injected.
 
 **Basket** — every cell we *want* to observe, with a weight saying how much each
 matters. Defined in `config/basket.yaml`: 15 city pairs × 6 carriers × 5 advance
-windows × Economy. With the three currently collectable sources, that's **975
-cells**. Weights come from route passenger share × carrier market share ×
-booking-window share. *(The weights in the file are placeholders shaped like the
-real DGCA figures. Read the warning at the top of `basket.yaml` before you quote
-any number from this system.)*
+windows × Economy. Weights come from route passenger share × carrier market share
+× booking-window share. *(The weights in the file are placeholders shaped like
+the real DGCA figures. Read the warning at the top of `basket.yaml` before you
+quote any number from this system.)*
+
+The basket is also scoped to a set of **sources**. Spanning all three collectable
+sources it is 975 cells; **as shipped it is narrowed to EaseMyTrip alone, 450
+cells** — because the other two return nothing from the runner we have (§7). All
+six carriers survive that narrowing, since EaseMyTrip quotes all six; what is
+lost is the direct-vs-OTA channel split. **So the published series is currently a
+single-channel index: fares as quoted by one OTA.** It is not evidence about what
+airlines charge on their own sites, and anything written about it has to say so.
+That scope is a recorded decision in `basket.yaml` with a date and a reason, not
+something the code infers — see §7.
 
 **Chained index** — how we get from cell prices to one number. Each day we ask:
 "for the cells we saw both yesterday and today, how much did they move on
@@ -196,7 +205,8 @@ product of thirty daily links, to bound chain drift.
 
 ```
 config/
-  basket.yaml          routes, carriers, windows, weights, QC thresholds
+  basket.yaml          routes, carriers, windows, weights, QC thresholds,
+                       and the SOURCE SCOPE the index is weighted over (§7)
   sources.yaml         the 9 sources + the robots.txt audit for each
 
 db/migrations/
@@ -233,6 +243,7 @@ apix/                  ← the Python worker
 
 scripts/
   audit_robots.py      re-check every source's robots.txt; exits 1 on a real conflict
+  check_reachability.py  can THIS machine read each source's robots.txt? (see §7)
   run_collection.py    one collection pass
   seed_postgres.py     build the index and publish it
   compute_index.py     rebuild from a local SQLite archive
@@ -286,7 +297,8 @@ For a real collection pass:
 
 ```bash
 playwright install chromium
-python scripts/audit_robots.py     # re-check robots.txt; exits 1 on a real conflict
+python scripts/check_reachability.py   # can this machine reach the sources at all?
+python scripts/audit_robots.py        # re-check robots.txt; exits 1 on a real conflict
 python scripts/run_collection.py -v
 python scripts/seed_postgres.py --from-postgres
 ```
@@ -359,7 +371,8 @@ site is stale  →  are recent points quality='fail'?
 
 The rebuild step now prints most of that for you when it refuses.
 
-**What was changed.** Two things, at the two places it stayed quiet:
+**What was changed.** Three things — two at the places it stayed quiet, and one
+at the cause:
 
 - `scripts/seed_postgres.py --from-postgres` now **exits 4 rather than
   publishing a `fail`-quality newest point**. Writing one changed nothing a
@@ -374,11 +387,29 @@ The rebuild step now prints most of that for you when it refuses.
   Previously one timeout poisoned the cache for a full hour, so a single slow
   response at the top of a run cost that source all 75 of its requests.
 
-To be clear about the limits of that second fix: it does not prove those hosts
-are reachable from GitHub's network at all. If they are simply refusing that
-network, the job will now go **red** instead of quietly publishing an index built
-out of imputation. Red is the correct outcome. A stale index with a visible alarm
-beats a moving index nobody can trust.
+- `config/basket.yaml` now **narrows the basket to the sources that actually
+  answer**. The retry helped but did not fix it: Air India and Yatra still return
+  0 of 75 requests from GitHub's runners, and with them in the basket 9 of 14
+  daily points were unpublishable. Weighting over EaseMyTrip alone makes the
+  index publishable again at the cost of the channel dimension. This is a
+  deliberate, dated entry in the config — never something the code decides,
+  because letting non-response reshape the basket is exactly the bias imputation
+  exists to prevent. `scope_to_dataset()` in `apix/pipeline.py` holds that line,
+  and falls back to the dataset only for a replay the scope cannot match (a
+  synthetic run, whose ids are `sim_*`).
+
+**This is a reduction in what the index claims, not a fix.** The real fix is a
+collector on a network those two hosts answer, which restores 975 cells and the
+direct-vs-OTA split. `scripts/check_reachability.py` qualifies a candidate host —
+it fetches robots.txt and nothing else — and setting the repository variable
+`COLLECTOR_RUNNER` points the workflow at a self-hosted runner. DEPLOY.md §5
+walks through it. **When those sources come back, delete the `active` key under
+`sources:` in `basket.yaml`**; until then their quotes are still collected and
+archived, they just carry no weight.
+
+Read the verdicts from that script carefully. `unreachable` is the network and is
+worth moving hosts for. `refused` is an HTTP 403 or 429 — the operator declining
+automated clients — and that is the same answer from anywhere; leave it alone.
 
 ### Other gotchas worth knowing
 

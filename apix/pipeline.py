@@ -13,14 +13,41 @@ from .normalize.fares import normalise_all
 from .normalize.qc import run_qc
 
 
+def scope_to_dataset(basket: Basket, observed_sources: tuple[str, ...]) -> Basket:
+    """Decide which sources this basket is weighted over for this dataset.
+
+    Three cases, in order:
+
+    1. The config names a scope (basket.yaml `sources.active`) and the dataset
+       contains at least one of those sources. The recorded decision stands:
+       narrowing the basket is a statement about what the index measures, and a
+       source being quiet today must not quietly widen or narrow it. Sources
+       outside the scope carry zero weight and drop out of the index.
+
+    2. The config names a scope and the dataset contains NONE of it. This is a
+       replay of a different world - a synthetic run whose ids are `sim_*`, or a
+       backfill from an archive predating the scope. Weighting over a scope that
+       matches nothing would produce an index of zero cells, so weight over what
+       is actually in hand instead.
+
+    3. No scope configured: weight over the sources present in the dataset, so a
+       replay matches the data rather than today's compliance posture.
+    """
+    if not observed_sources:
+        return basket
+    if basket.active_sources is None:
+        return basket.with_sources(observed_sources)
+    if set(basket.active_sources) & set(observed_sources):
+        return basket
+    return basket.with_sources(observed_sources)
+
+
 def build_index(raws: Iterable[RawQuote], basket: Optional[Basket] = None,
                 price_concept: str = "all_in") -> dict:
     basket = basket or load_basket()
     normalised = list(normalise_all(raws, price_concept))
-    # Weight the basket over the sources actually present in this dataset.
     observed_sources = tuple(sorted({q.source_id for q in normalised}))
-    if observed_sources and basket.active_sources is None:
-        basket = basket.with_sources(observed_sources)
+    basket = scope_to_dataset(basket, observed_sources)
     qc = run_qc(normalised, basket.qc)
     by_day = elementary_prices(qc.kept)
     return {

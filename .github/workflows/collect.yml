@@ -20,7 +20,17 @@ concurrency:
 
 jobs:
   collect:
-    runs-on: ubuntu-latest
+    # GitHub-hosted runners cannot reach airindia.com or yatra.com: robots.txt
+    # times out on every attempt, the gate fails closed, and both sources return
+    # zero quotes. That is a property of this network, not of the sites - see
+    # scripts/check_reachability.py.
+    #
+    # Point this at a runner on a network those hosts answer and both sources
+    # come back. Set the repository variable COLLECTOR_RUNNER to that runner's
+    # label (Settings -> Secrets and variables -> Actions -> Variables); unset,
+    # it stays on ubuntu-latest. Qualify the host FIRST by running
+    # `python scripts/check_reachability.py` on it. Full setup: DEPLOY.md.
+    runs-on: ${{ vars.COLLECTOR_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 90
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -39,6 +49,15 @@ jobs:
 
       - name: Verify the index engine before trusting it with real data
         run: python -m pytest -q
+
+      - name: Report which sources this runner can reach
+        # Cheap, and it turns "the index went unpublishable" into "these two
+        # sources are unreachable from this runner" at the top of the log rather
+        # than three steps later. Never fails the run: an unreachable source is
+        # handled downstream as a non-response, and the quality guard decides
+        # whether what is left is publishable.
+        continue-on-error: true
+        run: python scripts/check_reachability.py
 
       - name: Re-audit robots.txt
         # Sites change their crawl policy without notice. This stops the run

@@ -21,7 +21,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from .config import Basket, SourceConfig, load_basket, load_sources
+from .config import Basket, SourceConfig, collectable_sources, load_basket, load_sources
 from .models import Cell, CellPrice, IndexPoint, RawQuote
 
 MIGRATION = Path(__file__).resolve().parent.parent / "db" / "migrations" / "001_init.sql"
@@ -151,12 +151,22 @@ class PostgresStore(Store):
         return len(rows)
 
     def sync_basket(self, basket: Basket) -> int:
+        # The source scope belongs in the database next to the other weights.
+        # It is the one basket dimension a reader cannot infer from the site: a
+        # source can be listed as collectable in the compliance audit and still
+        # be outside the basket the index is weighted over.
+        scope = basket.active_sources or tuple(s.id for s in collectable_sources())
         rows = (
             [("route", k, v, None) for k, v in basket.route_weights.items()]
             + [("carrier", k, v, None) for k, v in basket.carrier_weights.items()]
             + [("window", str(k), v, f"T+{k}") for k, v in basket.window_weights.items()]
+            + [("source", sid, 1.0 / len(scope), None) for sid in sorted(scope)]
         )
         with self.conn.cursor() as cur:
+            # Narrowing the scope must remove the rows it dropped, or the site
+            # would keep showing a source the index no longer weights over.
+            cur.execute("DELETE FROM basket_weight WHERE kind = 'source' "
+                        "AND key <> ALL(%s)", (list(scope),))
             cur.executemany(
                 "INSERT INTO basket_weight (kind,key,weight,label) VALUES (%s,%s,%s,%s) "
                 "ON CONFLICT (kind,key) DO UPDATE SET weight=EXCLUDED.weight, label=EXCLUDED.label",

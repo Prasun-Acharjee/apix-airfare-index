@@ -80,7 +80,12 @@ export interface CollectionLogEntry {
 }
 
 export interface BasketWeight {
-  readonly kind: "route" | "carrier" | "window";
+  /**
+   * "source" rows record which quoting sources the index is weighted over.
+   * A source can be listed as collectable on /compliance and still be outside
+   * the basket, so this is the only place a reader can see the actual scope.
+   */
+  readonly kind: "route" | "carrier" | "window" | "source";
   readonly key: string;
   readonly weight: number;
   readonly label: string | null;
