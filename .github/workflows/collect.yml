@@ -13,6 +13,10 @@ on:
         description: "Audit robots.txt only; do not collect"
         type: boolean
         default: false
+      publish_provisional:
+        description: "Publish today's point even if it fails the quality thresholds"
+        type: boolean
+        default: false
 
 concurrency:
   group: apix-collection
@@ -89,8 +93,17 @@ jobs:
         # step fails on quality, read the per-source counts in the Collect step
         # above: a source returning zero quotes has its whole basket weight
         # imputed, and enough of that makes every new point unpublishable.
+        #
+        # publish_provisional passes --allow-failed-quality: the point is written
+        # anyway and the site shows it badged `provisional`. It is a manual
+        # dispatch input on purpose - a human decides, per run, that a series
+        # reaching today is worth more than a series that is clean throughout.
+        # The scheduled run never sets it, so an unattended job still cannot
+        # publish a number nobody looked at.
         if: ${{ !inputs.dry_run }}
-        run: python scripts/seed_postgres.py --from-postgres
+        run: |
+          python scripts/seed_postgres.py --from-postgres \
+            ${{ inputs.publish_provisional && '--allow-failed-quality' || '' }}
 
       - name: Report what was published
         # Runs even when the rebuild refused, which is exactly when you want it:

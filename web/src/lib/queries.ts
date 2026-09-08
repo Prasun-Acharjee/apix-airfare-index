@@ -57,7 +57,15 @@ function toIndexPoint(r: IndexPointRow, frequency: Frequency): IndexPoint {
 export interface SeriesOptions {
   readonly start?: string | undefined;
   readonly end?: string | undefined;
-  /** Points flagged `fail` are excluded by default — they are not publishable. */
+  /**
+   * Points flagged `fail` are INCLUDED by default and badged in the UI, so the
+   * series runs to the latest collection day rather than stopping silently at
+   * the last clean one. Hiding them made an outage indistinguishable from a
+   * quiet market: the site simply stopped advancing and said nothing.
+   *
+   * Pass `false` for the clean series — the one to use for any analysis where a
+   * point resting on 90% imputation would be misleading.
+   */
   readonly includeFailed?: boolean | undefined;
 }
 
@@ -72,7 +80,7 @@ export async function getSeries(
     WHERE frequency = ${frequency}
       ${opts.start ? sql`AND on_date >= ${opts.start}` : sql``}
       ${opts.end ? sql`AND on_date <= ${opts.end}` : sql``}
-      ${opts.includeFailed ? sql`` : sql`AND quality <> 'fail'`}
+      ${opts.includeFailed === false ? sql`AND quality <> 'fail'` : sql``}
     ORDER BY on_date
   `;
   return rows.map((r) => toIndexPoint(r, frequency));
@@ -80,8 +88,9 @@ export async function getSeries(
 
 /**
  * Period-over-period change — the number a policy user actually asks for.
- * Computed from the same filtered series the site displays, so the percentage
- * and the chart can never disagree.
+ * Computed from the same series the site displays, so the percentage and the
+ * chart can never disagree. Each point carries its own `quality`, so a change
+ * computed across a provisional point can be identified as one.
  */
 export async function getInflation(
   frequency: Frequency,

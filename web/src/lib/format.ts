@@ -38,5 +38,5 @@ export function dayNumber(iso: string): number {
 export const qualityLabel: Record<string, string> = {
   ok: "ok",
   warn: "high imputation",
-  fail: "not publishable",
+  fail: "provisional",
 };

@@ -66,6 +66,21 @@ export default async function DashboardPage({
         {formatDay(meta.basePeriod)} = {meta.baseValue}
       </p>
 
+      {last.quality === "fail" ? (
+        <Banner>
+          <b>The latest point is provisional.</b> {formatDay(last.onDate)} rests on{" "}
+          {pct(last.imputationShare)} imputation, above the 60% threshold at which a point
+          is normally withheld — too few sources answered that day, so most of the basket
+          was estimated rather than observed. It is shown so the series reaches the latest
+          collection day, and badged so it is never mistaken for a measured one. Read it as
+          an indication of direction, not a level. Per-day detail is on the{" "}
+          <a className="underline" href="/compliance">
+            compliance page
+          </a>
+          .
+        </Banner>
+      ) : null}
+
       {provenance.synthetic ? (
         <Banner>
           <b>Synthetic data.</b> This series is computed from simulated quotes to
@@ -95,7 +110,7 @@ export default async function DashboardPage({
 
       <Card
         title="Index level"
-        note="Chained weighted geometric index. Points flagged not-publishable are excluded."
+        note="Chained weighted geometric index. Provisional points are shown and badged, not hidden."
         actions={
           <Suspense fallback={null}>
             <FrequencyTabs active={frequency} />

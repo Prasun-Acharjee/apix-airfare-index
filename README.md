@@ -114,10 +114,19 @@ actually observed (`coverage`) and how much rested on imputation
 |---|---|---|
 | under 35% | `ok` | published normally |
 | 35–60% | `warn` | published, badged on the site |
-| **60% or more** | **`fail`** | **hidden by the website, and the rebuild now refuses to publish it** |
+| **60% or more** | **`fail`** | **the nightly rebuild refuses to write it; a manual run can publish it, badged `provisional`** |
 
 That last row is the single most important operational fact in this repo. See
 §7.
+
+The default is still refusal: an unattended job never publishes a point nobody
+looked at. But a `fail` point is no longer *hidden*. Dispatching the workflow
+with `publish_provisional` writes it, and the site shows it with a red badge and
+a banner giving its imputation share. Withholding it silently made an outage
+look identical to a quiet market — the series simply stopped advancing and said
+nothing — which is its own kind of dishonesty. Showing the number with its
+quality attached beats showing no number at all. Anything needing a clean series
+asks the API for `includeFailed=false`.
 
 ---
 
@@ -352,10 +361,15 @@ present in the earlier days, so their cells — about 85% of basket weight — g
 imputed every single day.
 
 Imputation share hit 84.9%. That's past the 60% fail threshold, so every new
-point came out `fail`. And `web/src/lib/queries.ts` filters `fail` points out by
-default (`AND quality <> 'fail'`), so no reader ever saw them. The index behind
-them had drifted 101.37 → 104.50 → 109.68 — **+8.2% in three days, entirely from
-imputed movements** — and nothing anywhere exited non-zero.
+point came out `fail`. And `web/src/lib/queries.ts` filtered `fail` points out
+by default, so no reader ever saw them. The index behind them had drifted
+101.37 → 104.50 → 109.68 — **+8.2% in three days, entirely from imputed
+movements** — and nothing anywhere exited non-zero.
+
+*(That filter is now inverted: `fail` points are shown and badged `provisional`
+rather than hidden, because a series that silently stops advancing is its own
+failure mode. The rebuild still refuses to write them unless a human dispatches
+the run with `publish_provisional`.)*
 
 **The general lesson.** In this system a failure surfaces several steps from its
 cause. A collector that stops returning quotes shows up as an *index quality*
@@ -523,8 +537,10 @@ not have. `apix/compliance/rfc9309.py` implements RFC 9309 properly, and
 
 Two things to know:
 
-- **`fail` points are hidden by default.** `includeFailed=true` shows them. This
-  is the filter that made the outage in §7 invisible.
+- **`fail` points are shown, badged `provisional`.** `includeFailed=false` gives
+  the clean series instead — use it for any analysis where a point resting on 90%
+  imputation would mislead. This filter used to default the other way, which is
+  what made the outage in §7 invisible.
 - **Every response carrying a number also carries its provenance**, and any
   series containing simulated quotes is flagged `synthetic` with a warning that
   cannot be switched off.
