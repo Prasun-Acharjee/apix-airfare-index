@@ -51,7 +51,10 @@ def _provenance(conn) -> dict:
 @app.get("/health")
 def health():
     with connect(DB_PATH) as conn:
-        n = conn.execute("SELECT COUNT(*) c FROM index_point").fetchone()["c"]
+        # Headline points only. Counting the per-route series here would report
+        # sixteen times the number of published points and mask an empty index.
+        n = conn.execute(
+            "SELECT COUNT(*) c FROM index_point WHERE route='ALL'").fetchone()["c"]
         prov = _provenance(conn)
     return {"status": "ok", "index_points": n, **prov}
 

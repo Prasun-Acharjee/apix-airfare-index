@@ -167,6 +167,14 @@ def load_cell_prices(conn: sqlite3.Connection, include_imputed: bool = False) ->
     return out
 
 
-def load_index(conn: sqlite3.Connection, frequency: str = "daily") -> list[dict]:
+def load_index(conn: sqlite3.Connection, frequency: str = "daily",
+               route: str = "ALL") -> list[dict]:
+    """One series. Defaults to the headline index over every city pair.
+
+    The route filter is not optional in practice: without it this returns the
+    headline series interleaved with all fifteen route series, which reads as one
+    index taking several values on the same day.
+    """
     return [dict(r) for r in conn.execute(
-        "SELECT * FROM index_point WHERE frequency=? ORDER BY on_date", (frequency,))]
+        "SELECT * FROM index_point WHERE frequency=? AND route=? ORDER BY on_date",
+        (frequency, route))]

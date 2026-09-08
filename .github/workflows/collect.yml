@@ -112,14 +112,30 @@ jobs:
         run: |
           python - <<'EOF'
           import os
+          from apix.models import ALL_ROUTES
           from apix.store import PostgresStore
           st = PostgresStore(os.environ["DATABASE_URL"])
           with st.conn.cursor() as c:
+              # route = ALL, or this prints five rows for the same day: the
+              # headline series interleaved with whichever route series sort
+              # alongside it, which reads as an index that moved four ways at once.
               c.execute("SELECT on_date, value, coverage, imputation_share, quality "
-                        "FROM index_point WHERE frequency='daily' "
-                        "ORDER BY on_date DESC LIMIT 5")
+                        "FROM index_point WHERE frequency='daily' AND route=%s "
+                        "ORDER BY on_date DESC LIMIT 5", (ALL_ROUTES,))
+              print("Headline index (all city pairs, weighted)")
               print(f"{'date':12s} {'index':>8s} {'cover':>7s} {'imput':>7s}  quality")
               for d, v, cov, imp, q in c.fetchall():
                   print(f"{str(d):12s} {v:8.2f} {cov:6.1%} {imp:6.1%}  {q}")
+
+              c.execute("SELECT route, value, imputation_share, quality "
+                        "FROM index_point WHERE frequency='daily' AND route <> %s "
+                        "AND on_date = (SELECT max(on_date) FROM index_point "
+                        "               WHERE frequency='daily' AND route <> %s) "
+                        "ORDER BY route", (ALL_ROUTES, ALL_ROUTES))
+              rows = c.fetchall()
+              if rows:
+                  print(f"\nPer-route, latest day ({len(rows)} pairs)")
+                  for r, v, imp, q in rows:
+                      print(f"  {r:12s} {v:8.2f}  imputed {imp:6.1%}  {q}")
           st.close()
           EOF

@@ -89,3 +89,38 @@ def test_restricting_to_a_route_keeps_the_weights_normalised():
         cells = list(rb.cells())
         assert {c.route for c in cells} == {route}
         assert sum(rb.cell_weight(c) for c in cells) == pytest.approx(1.0)
+
+
+# --- readers must not blend the route series into the headline one -----------
+
+def test_the_local_api_loader_returns_one_series_not_sixteen():
+    """Every reader of index_point has to filter on route now. This one is the
+    easiest to forget: it used to be `SELECT * WHERE frequency=?`, which after
+    the route column returns the headline series interleaved with all fifteen
+    route series — one index apparently taking several values on the same day.
+    """
+    import os
+    import tempfile
+    from apix.db import connect, load_index, upsert_index
+    from apix.models import ALL_ROUTES
+
+    basket = load_basket()
+    raws = list(generate(basket, start=date(2026, 4, 1), days=5, fuel_shock_on=None))
+    res = build_index(raws, basket)
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "t.db")
+        with connect(path) as conn:
+            upsert_index(conn, res["daily"])
+            for freqs in res["by_route"].values():
+                upsert_index(conn, freqs["daily"])
+
+            headline = load_index(conn, "daily")
+            assert {r["route"] for r in headline} == {ALL_ROUTES}
+            assert len({r["on_date"] for r in headline}) == len(headline), \
+                "one point per day, or the series is blended"
+
+            pair = sorted(basket.route_weights)[0]
+            one = load_index(conn, "daily", route=pair)
+            assert one and {r["route"] for r in one} == {pair}
+            assert [r["value"] for r in one] != [r["value"] for r in headline]

@@ -308,8 +308,10 @@ export async function getHealth(): Promise<{
   readonly indexPoints: number;
   readonly provenance: Provenance;
 }> {
+  // Headline points only. Counting the per-route series would report sixteen
+  // times the published points and could report "ok" on an empty headline index.
   const [{ n } = { n: 0 }] = await sql<{ n: number }[]>`
-    SELECT COUNT(*)::int AS n FROM index_point
+    SELECT COUNT(*)::int AS n FROM index_point WHERE route = ${ALL_ROUTES}
   `;
   return {
     status: n > 0 ? "ok" : "empty",
