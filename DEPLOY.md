@@ -5,7 +5,7 @@ Two moving parts, deliberately separated:
 | Part | What it does | Where it runs |
 |---|---|---|
 | **Next.js app** (`web/`) | Reads Postgres, serves the dashboard and API | Vercel (serverless) |
-| **Python worker** (`apix/`, `scripts/`) | Scrapes, normalises, computes the index, writes Postgres | GitHub Actions (scheduled) |
+| **Python worker** (`apix/`, `scripts/`) | Scrapes, normalises, computes the index, writes Postgres | GitHub Actions (manual) |
 
 They never talk to each other — only to the same database. The scraper needs a
 real browser, a long-running process and a five-second-per-host crawl delay, none
@@ -88,7 +88,9 @@ firewalled. It is needed at runtime.
 
 Add `DATABASE_URL` as a repository secret
 (*Settings → Secrets and variables → Actions → New repository secret*).
-`.github/workflows/collect.yml` then runs daily at 02:30 UTC (08:00 IST). It:
+`.github/workflows/collect.yml` is then runnable from *Actions → Collection and
+index rebuild → Run workflow*. **There is no schedule**: it was removed on
+2026-09-17, so nothing collects until you start it. Each run:
 
 1. runs the test suite, and stops if the index engine is broken;
 2. reports which sources this runner can reach (never fails the run — see
@@ -99,7 +101,19 @@ Add `DATABASE_URL` as a repository secret
    only if the newest point clears the quality thresholds;
 6. prints the last five index points so the run log shows what is actually live.
 
-Trigger it by hand from the Actions tab; use the `dry_run` input to audit only.
+Use the `dry_run` input to audit robots.txt without collecting, and
+`publish_provisional` to publish a point that fails the quality thresholds.
+
+To put the daily schedule back, restore this above `workflow_dispatch:` in
+`.github/workflows/collect.yml` (the file keeps it in a comment):
+
+```yaml
+  schedule:
+    - cron: "30 2 * * *"      # 02:30 UTC = 08:00 IST
+```
+
+GitHub runs scheduled jobs late, sometimes by hours, so timestamps drifting off
+02:30 is normal and not a fault.
 
 > **Why the history lives in Postgres.** The index is chained: each point is the
 > previous point times a link computed from cells present in *both* periods. A

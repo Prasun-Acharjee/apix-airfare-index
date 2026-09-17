@@ -114,13 +114,13 @@ actually observed (`coverage`) and how much rested on imputation
 |---|---|---|
 | under 35% | `ok` | published normally |
 | 35–60% | `warn` | published, badged on the site |
-| **60% or more** | **`fail`** | **the nightly rebuild refuses to write it; a manual run can publish it, badged `provisional`** |
+| **60% or more** | **`fail`** | **the rebuild refuses to write it; re-running with `publish_provisional` publishes it, badged `provisional`** |
 
 That last row is the single most important operational fact in this repo. See
 §7.
 
-The default is still refusal: an unattended job never publishes a point nobody
-looked at. But a `fail` point is no longer *hidden*. Dispatching the workflow
+The default is still refusal: a run started without thinking about it never
+publishes a point nobody looked at. But a `fail` point is no longer *hidden*. Dispatching the workflow
 with `publish_provisional` writes it, and the site shows it with a red badge and
 a banner giving its imputation share. Withholding it silently made an outage
 look identical to a quiet market — the series simply stopped advancing and said
@@ -136,7 +136,7 @@ Two runtimes that never talk to each other. They share a Postgres database.
 
 ```
    PYTHON WORKER                      POSTGRES                  NEXT.JS SITE
-   (GitHub Actions, nightly)                                    (Vercel)
+   (GitHub Actions, manual)                                     (Vercel)
 
    robots.txt gate                    raw_quote      ─read─▶    API routes
    Playwright browser     ─write─▶    cell_price     ─read─▶    dashboard
@@ -265,7 +265,7 @@ web/                   ← Next.js 16 App Router, TypeScript strict
 
 tests/                 74 tests
 .github/workflows/
-  collect.yml          the nightly job: test → audit → collect → publish → report
+  collect.yml          manual job: test → audit → collect → publish → report
 ```
 
 ### Where to start reading
@@ -316,10 +316,21 @@ Deployment (Vercel + Neon, or self-hosted Docker) is in **[DEPLOY.md](DEPLOY.md)
 
 ---
 
-## 6. The nightly job
+## 6. The collection job
 
-`.github/workflows/collect.yml`, scheduled 02:30 UTC (08:00 IST). GitHub often
-runs scheduled jobs late — hours late — so don't be alarmed by the timestamps.
+`.github/workflows/collect.yml`. **It runs only when you start it** — Actions tab
+→ *Collection and index rebuild* → *Run workflow*. The daily 02:30 UTC schedule
+was removed on 2026-09-17; restoring it means putting the `schedule:` block back,
+and the workflow keeps the cron line in a comment for that.
+
+Know what manual-only costs, because it is not obvious. The index is chained:
+every point is the one before it times a link computed from cells present in
+*both* periods. A day nobody runs the job is a day with no quotes, and the next
+link then compares prices across that whole gap rather than across a day. The
+series stays arithmetically valid — chaining does not care about spacing — but
+its points are no longer evenly spaced, and a "daily" change is really "change
+since whenever it last ran". If you go back to publishing seriously, put the
+schedule back first.
 
 ```
 run tests  →  re-audit robots.txt  →  collect  →  rebuild index  →  report
@@ -350,7 +361,7 @@ site is actually serving and how stale it is.
 This happened for real, 2026-08-28 to 08-30, and both fixes in the current code
 exist because of it. Read this section before debugging anything.
 
-**The symptom.** The nightly job reported success three nights running. The
+**The symptom.** The job reported success three nights running. The
 website hadn't moved since 2026-08-27.
 
 **What was actually happening.** Air India and Yatra returned zero quotes from
@@ -444,7 +455,7 @@ automated clients — and that is the same answer from anywhere; leave it alone.
   is *truthy*, so it silently shadows the environment. That bug sent an entire
   night's quotes to the CI runner's disposable filesystem. `--db` now defaults to
   `None`, and `tests/test_collection_target.py` pins it.
-- **The runner's filesystem is discarded.** Anything the nightly job needs to
+- **The runner's filesystem is discarded.** Anything the collection job needs to
   keep must go to Postgres. There is no local archive in CI.
 - **The rebuild reads the whole history, not just today.** A chained index is
   recomputed from every quote ever collected. This is what makes the daily job
